@@ -1,0 +1,10 @@
+# Goal
+string mode  # "URBAN", "HIGHWAY", "STOP" 등
+
+---
+# Result
+bool success
+
+---
+# Feedback
+string status_message
