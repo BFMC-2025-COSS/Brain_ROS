@@ -72,8 +72,19 @@ class ControlServer:
             self.path.append((x, y))
 
     def gps_callback(self, msg):
-        self.current_pos = (msg.posA, msg.posB)
-        self.current_yaw = self.normalize_angle(msg.rotA)
+        # # 차량 중심 기준
+        # self.current_pos = (msg.posA, msg.posB)
+        # self.current_yaw = self.normalize_angle(msg.rotA)
+
+        # 차량 후륜 기준
+        x_center, y_center = msg.posA, msg.posB
+        theta = self.normalize_angle(msg.rotA)
+
+        x_rear = x_center - (self.wheel_base / 2) * math.cos(theta)
+        y_rear = y_center - (self.wheel_base / 2) * math.sin(theta)
+
+        self.current_pos = (x_rear, y_rear)
+        self.current_yaw = theta
 
     def control_loop(self, event):
         if not self.path:
