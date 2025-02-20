@@ -20,7 +20,7 @@ import json
 class ControlServer:
     def __init__(self, name='control_action'):
         # ROS Node
-        rospy.init_node('control_action_server', anonymous=True)
+        rospy.init_node('control_action_server')
 
         # ROS Parameters
         self.look_ahead_dist = rospy.get_param('~look_ahead_dist', 0.068)
@@ -105,13 +105,11 @@ class ControlServer:
 
         rate = rospy.Rate(10)
         while not rospy.is_shutdown():
-            # preempt(취소) 요청 확인
             if self._as.is_preempt_requested():
                 rospy.logwarn("[ControlActionServer] Preempt requested -> Cancel current goal.")
                 self._as.set_preempted()
                 return
 
-            # 주행 모드에 따라 /cmd_vel 발행
             if goal.mode == "STOP":
                 self.desired_speed = 0.0
                 steering_angle = 0.0
@@ -130,6 +128,13 @@ class ControlServer:
                     self.current_yaw
                 )
             elif goal.mode == "HIGHWAY":
+                self.desired_speed = 20.0
+                steering_angle = self.pp.compute_steering_angle(
+                    self.path,
+                    self.current_pos,
+                    self.current_yaw
+                )
+            elif goal.mode == "INTERSECTION":
                 self.desired_speed = 20.0
                 steering_angle = self.pp.compute_steering_angle(
                     self.path,
@@ -184,14 +189,11 @@ class ControlServer:
             command = json.dumps(command)
             self.command_pub.publish(command)
 
-            # 중간 피드백 전송
             feedback.status_message = "Current mode: {}".format(goal.mode)
             self._as.publish_feedback(feedback)
 
             rate.sleep()
 
-        # 노드가 종료되면 여기로
-        # 한 번도 preempt 없이 종료되었다면, success로 볼 수도 있음.
         result.success = True
         self._as.set_succeeded(result)
         rospy.loginfo("[ControlActionServer] Node is shutting down. Goal ended with success.")

@@ -6,8 +6,8 @@
 
     <!-- Launch the Python node -->
     <node pkg="control"
-          type="graphml_to_path_node.py"
-          name="graphml_to_path_node"
+          type="node_to_path.py"
+          name="node_to_path"
           output="screen">
     </node>
 

@@ -12,9 +12,9 @@ import networkx as nx
 import os
 import yaml
 
-class GraphMLToPathNode:
+class NodeToPath:
     def __init__(self):
-        rospy.init_node('graphml_to_path_node', anonymous=True)
+        rospy.init_node('node_to_path', anonymous=True)
 
         rospack = rospkg.RosPack()
         package_path = rospack.get_path('control')
@@ -220,7 +220,7 @@ class GraphMLToPathNode:
 
 if __name__ == '__main__':
     try:
-        node = GraphMLToPathNode()
-        node.run()
+        ntp = NodeToPath()
+        ntp.run()
     except rospy.ROSInterruptException:
         pass
