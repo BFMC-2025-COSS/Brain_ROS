@@ -73,13 +73,13 @@ def zoom_in_on_region(image_path, x, y, heading, zoom_width=160, zoom_height=90)
     # 결과 출력
     # cv2.imshow("Original Image", image)
     # cv2.imshow("Zoomed Image", zoomed)
-    # # cv2.imwrite("./zoom_img.png", zoomed)
+    cv2.imwrite("./zoom_img.png", zoomed)
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
 
-    return zoomed
+    return zoomed, M
 
 # 예제 실행 (파일 경로와 확대 중심 좌표, 헤딩값 입력)
 if __name__ == '__main__':
     image_path = "./test_img/SEAME_map.png"
-    zoom_in_on_region(image_path, x=450, y=200, heading=45)
+    zoom_in_on_region(image_path, x=720, y=425, heading=0)
