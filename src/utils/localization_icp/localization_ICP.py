@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 from scipy.spatial import KDTree
 import matplotlib.pyplot as plt
+import cupy as cp
 
 def extract_points_from_image(image_path, threshold_val=127):
     # image = cv2.imread(image_path)
@@ -32,23 +33,37 @@ def nearest_neighbor(src, dst):
     return distances, indices
 
 def compute_transform(src, dst):
-    centroid_src = np.mean(src, axis=0)
-    centroid_dst = np.mean(dst, axis=0)
+    src = cp.asarray(src)
+    dst = cp.asarray(dst)
+
+    centroid_src = cp.mean(src, axis=0)
+    centroid_dst = cp.mean(dst, axis=0)
+    # centroid_src = np.mean(src, axis=0)
+    # centroid_dst = np.mean(dst, axis=0)
     
     src_centered = src - centroid_src
     dst_centered = dst - centroid_dst
     
-    W = np.dot(dst_centered.T, src_centered)
+    W = cp.dot(dst_centered.T, src_centered)
     U, _, Vt = np.linalg.svd(W)
-    R = np.dot(U, Vt)
+    R = cp.dot(U, Vt)
+    # W = np.dot(dst_centered.T, src_centered)
+    # U, _, Vt = np.linalg.svd(W)
+    # R = np.dot(U, Vt)
 
     # 반사행렬(det < 0) 보정
-    if np.linalg.det(R) < 0:
-        Vt[-1, :] *= -1 
-        R = np.dot(U, Vt)
+    # if np.linalg.det(R) < 0:
+    #     Vt[-1, :] *= -1 
+    #     R = np.dot(U, Vt)
     
-    t = centroid_dst - np.dot(R, centroid_src)
-    return R, t
+    # t = centroid_dst - np.dot(R, centroid_src)
+    if cp.linalg.det(R) < 0:
+        Vt[-1, :] *= -1 
+        R = cp.dot(U, Vt)
+    
+    t = centroid_dst - cp.dot(R, centroid_src)
+    # return R, t
+    return cp.asnumpy(R), cp.asnumpy(t)
 
 def icp(source, target, max_iterations=20, tolerance=1e-6):
     src = source.copy()
@@ -61,7 +76,7 @@ def icp(source, target, max_iterations=20, tolerance=1e-6):
         print(f"Iteration: {i}")
         distances, indices = nearest_neighbor(src, dst)
         matched_dst = dst[indices]
-        
+        print("Ready compute")
         R, t = compute_transform(src, matched_dst)
         
         # 현재 단계에서의 2D rigid 변환 행렬 만들기

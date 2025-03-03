@@ -5,8 +5,9 @@ import matplotlib.pyplot as plt
 
 # 원본 이미지 로드
 def convert_bev(img):
-    img = cv2.imread(img)
-    image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    # img = cv2.imread(img)
+    # image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    image = img
     h, w = image.shape[:2]
 
     # 🔹 차선의 시작점과 끝점을 수동으로 설정 (예제 값)
@@ -65,20 +66,20 @@ def convert_bev(img):
 
     # 🔹 변환 적용 (BEV)
     bev_image = cv2.warpPerspective(image, H, (w, h))
-    cv2.imwrite("bev_image1.png",bev_image)
+    # cv2.imwrite("bev_image1.png",bev_image)
     # 🔹 결과 출력
-    plt.figure(figsize=(10,5))
-    plt.subplot(1,2,1)
-    plt.title("Original Image")
-    plt.imshow(image_with_lines)
-    plt.scatter(*zip(*src_pts), color='red', marker='o')  # 차선 위치 표시
+    # plt.figure(figsize=(10,5))
+    # plt.subplot(1,2,1)
+    # plt.title("Original Image")
+    # plt.imshow(image_with_lines)
+    # plt.scatter(*zip(*src_pts), color='red', marker='o')  # 차선 위치 표시
 
-    plt.subplot(1,2,2)
-    plt.title("BEV (Perspective Transformed)")
-    plt.imshow(bev_image)
-    plt.scatter(*zip(*dst_pts), color='blue', marker='o')  # 변환된 좌표 표시
+    # plt.subplot(1,2,2)
+    # plt.title("BEV (Perspective Transformed)")
+    # plt.imshow(bev_image)
+    # plt.scatter(*zip(*dst_pts), color='blue', marker='o')  # 변환된 좌표 표시
 
-    plt.show()
+    # plt.show()
 
     return bev_image
 

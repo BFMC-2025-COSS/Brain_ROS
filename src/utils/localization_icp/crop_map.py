@@ -71,11 +71,11 @@ def zoom_in_on_region(image_path, x, y, heading, zoom_width=160, zoom_height=90)
     cv2.polylines(image, [rotated_pts], isClosed=True, color=(0, 0, 255), thickness=2)
     
     # 결과 출력
-    # cv2.imshow("Original Image", image)
-    # cv2.imshow("Zoomed Image", zoomed)
-    cv2.imwrite("./zoom_img.png", zoomed)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    #cv2.imshow("Original Image", image)
+    #cv2.imshow("Zoomed Image", zoomed)
+    #cv2.imwrite("./zoom_img.png", zoomed)
+    #cv2.waitKey(0)
+    #cv2.destroyAllWindows()
 
     return zoomed, M
 
