@@ -6,7 +6,10 @@ import cupy as cp
 
 def extract_points_from_image(image_path, threshold_val=127):
     # image = cv2.imread(image_path)
-    image = image_path
+    #image = image_path
+    image = cv2.pyrDown(image_path)
+    image = cv2.pyrDown(image)
+
     if image is None:
         raise ValueError(f"Cannot load image: {image_path}")
 
@@ -65,9 +68,9 @@ def compute_transform(src, dst):
     # return R, t
     return cp.asnumpy(R), cp.asnumpy(t)
 
-def icp(source, target, max_iterations=20, tolerance=1e-6):
-    src = source.copy()
-    dst = target.copy()
+def icp(src, dst, max_iterations=20, tolerance=1e-4):
+    # src = source.copy()
+    # dst = target.copy()
 
     T_total = np.eye(3, dtype=np.float32)
     prev_error = float('inf')

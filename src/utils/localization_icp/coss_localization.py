@@ -18,12 +18,14 @@ class LocalizationICP:
         rospy.init_node("localization_node", anonymous=True)
 
         self.image_sub = rospy.Subscriber('/camera/image_raw', Image, self.camCallback)
+        self.mask_sub = rospy.Subscriber('/camera/lane_mask', Image, self.maskCallback)
         self.odom_sub = rospy.Subscriber('/odom',Odometry, self.odomCallback)
         self.imu_sub = rospy.Subscriber('/BFMC_imu', bfmc_imu, self.imuCallback)
 
         # Camera 데이터 처리
         self.bridge = CvBridge()
         self.camera_img = None
+        self.mask_img = None
 
         # Odometry
         self.odom = [None, None]
@@ -33,6 +35,10 @@ class LocalizationICP:
         frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
         self.camera_img = cv2.resize(frame, (480, 270))
 
+    def maskCallback(self, msg):
+        frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="mono8")
+        self.mask_img = cv2.resize(frame, (480, 270))
+    
     def odomCallback(self, msg):
         self.odom[0] = int(msg.pose.pose.position.x * 100)
         self.odom[1] = int(msg.pose.pose.position.y * 100)
@@ -40,7 +46,7 @@ class LocalizationICP:
         pass
 
     def imuCallback(self, msg):
-        self.heading = (-(msg.yaw / 31635) * 360 + 90) % 360
+        self.heading = (-(msg.yaw / 31635) * 360 + 270) % 360
         # print("Heading value: ", self.heading)
 
     def run(self):
@@ -73,9 +79,13 @@ class LocalizationICP:
             if self.camera_img is None:
                 print("No camera image received")
                 return
+            if self.mask_img is None:
+                print("No mask image received")
+                return
             
             # BEV 이미지 추출
-            bev_image = convert_bev(self.camera_img)
+            # bev_image = convert_bev(self.camera_img)
+            bev_image = convert_bev(self.mask_img)
             print("bev_image shape:", bev_image.shape)
 
             # ICP localization
@@ -94,14 +104,17 @@ class LocalizationICP:
             bev_points_phys = rescale_points(bev_points, scale)
             map_points_phys = map_points.copy()
 
+            bev_view = rescale_points(bev_points_phys, 5)
+            map_view = rescale_points(map_points_phys, 5)
+
             canvas = np.ones((500, 500, 3), dtype=np.uint8)
 
-            for point in bev_points_phys:
+            for point in bev_view:
                 x, y = int(point[0]), int(point[1])
                 if 0 <= x < 500 and 0 <= y < 500:
                     cv2.circle(canvas, (x, y), 1, (0, 0, 255), -1)
 
-            for point in map_points_phys:
+            for point in map_view:
                 x, y = int(point[0]), int(point[1])
                 if 0 <= x < 500 and 0 <= y < 500:
                     cv2.circle(canvas, (x, y), 1, (255, 0, 0), -1)
