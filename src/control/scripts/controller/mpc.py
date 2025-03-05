@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
+
 import rospy
 import math
 import numpy as np
 import json
 import casadi as ca
+
 from scipy.interpolate import CubicSpline
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
@@ -26,6 +28,9 @@ class NonlinearMPCController:
         self.set_scenario(self.scenario)
         self.nx = 3  # (x, y, yaw)
         self.nu = 2  # (v, steer)
+
+        # JJB
+        self.global_idx = 0
 
     def set_scenario(self, scenario):
         self.scenario = scenario
@@ -122,7 +127,7 @@ class NonlinearMPCController:
 
         nlp = {'f': obj, 'x': opt_x, 'g': ca.vertcat(*g)}
         solver = ca.nlpsol('solver', 'ipopt', nlp, {
-            'ipopt': {'max_iter': 200, 'acceptable_tol': 1e-6, 'acceptable_obj_change_tol': 1e-6}
+            'ipopt': {'max_iter': 200, 'acceptable_tol': 1e-6, 'acceptable_obj_change_tol': 1e-6, 'print_level': 0}
         })
 
         x_init = []
@@ -142,6 +147,52 @@ class NonlinearMPCController:
         solx = sol['x'].full().flatten()
         all_controls = solx[self.nx*(T+1):].reshape((T, self.nu)).T
         return (all_controls[0, :], all_controls[1, :]), None
+    
+    # JJB
+    def get_nearest_idx(self, x, y, path, start_i):
+        if start_i >= len(path):
+            return len(path) - 1
+        return min(range(start_i, len(path)), key=lambda i: (x - path[i][0])**2 + (y - path[i][1])**2)
+    
+    def build_xref(self, path_xy, near_i, st, is_parking=False):
+        T = self.T
+        xref = np.zeros((3, T+1))
+        n = len(path_xy)
+        for i in range(T+1):
+            idx = min(near_i + i, n-1)
+            xref[0, i] = path_xy[idx][0]
+            xref[1, i] = path_xy[idx][1]
+            if i == 0:
+                xref[2, i] = st.yaw
+            else:
+                if is_parking and idx == n-1:
+                    xref[2, i] = 0.0
+                else:
+                    dx = path_xy[idx][0] - path_xy[idx-1][0]
+                    dy = path_xy[idx][1] - path_xy[idx-1][1]
+                    prev_yaw = xref[2, i-1]
+                    new_yaw = math.atan2(dy, dx)
+                    xref[2, i] = prev_yaw + math.atan2(math.sin(new_yaw - prev_yaw),
+                                                       math.cos(new_yaw - prev_yaw))
+        return xref
+        
+    def compute_control_command(self, path, current_pos, current_yaw, scenario="driving"):
+        self.global_path = path
+        self.x, self.y = current_pos
+        self.yaw = current_yaw
+
+        st = StateStruct(self.x, self.y, self.yaw)
+
+        near_i = self.get_nearest_idx(st.x, st.y, self.global_path, self.global_idx)
+        self.global_idx = near_i
+        xref = self.build_xref(self.global_path, near_i, st, is_parking=False)
+        self.set_scenario(scenario)
+        x0 = np.array([st.x, st.y, st.yaw])
+        (v_traj, steer_traj), _ = self.solve_mpc(x0, xref)
+        v_cmd = v_traj[0] if v_traj is not None else 0.0
+        s_cmd = steer_traj[0] if steer_traj is not None else 0.0
+
+        return v_cmd, s_cmd
 
 # ------------------ ROS Node ------------------
 class StateStruct:

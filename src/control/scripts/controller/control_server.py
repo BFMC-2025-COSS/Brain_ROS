@@ -12,6 +12,7 @@ from visualization_msgs.msg import Marker
 from utils.msg import localisation
 
 from pure_pursuit import PurePursuit
+from mpc import NonlinearMPCController
 
 import math
 import json
@@ -25,14 +26,14 @@ class ControlServer:
         # ROS Parameters
         self.look_ahead_dist = rospy.get_param('~look_ahead_dist', 0.38)
         self.wheel_base = rospy.get_param('~wheel_base', 0.26)
-        self.desired_speed = rospy.get_param('~desired_speed', 20.0)
+        self.desired_speed = rospy.get_param('~desired_speed', 0.2)
 
         # ROS Subscribers
         self.path_sub = rospy.Subscriber('/global_path', Path, self.path_callback)
         self.gps_sub = rospy.Subscriber('/automobile/localisation', localisation, self.gps_callback)
 
         # ROS Publishers
-        self.command_pub = rospy.Publisher('/automobile/command', String, queue_size=1)
+        self.command_pub = rospy.Publisher('/automobile/command', String, queue_size=10)
         self.current_pos_pub = rospy.Publisher('/visualization/current_pos', Marker, queue_size=1)
         self.look_ahead_pub = rospy.Publisher('/visualization/look_ahead', Marker, queue_size=1)
         self.path_marker_pub = rospy.Publisher('/visualization/look_ahead_line', Marker, queue_size=1)
@@ -44,6 +45,7 @@ class ControlServer:
         # self.control_timer = rospy.Timer(rospy.Duration(0.1), self.control_loop)
 
         self.pp = PurePursuit(self.look_ahead_dist, self.wheel_base)
+        self.mpc = NonlinearMPCController(dt=0.25, horizon=10, wheelbase=0.26)
 
         # Action
         self._action_name = name
@@ -114,7 +116,7 @@ class ControlServer:
         feedback = ControlFeedback()
         result = ControlResult()
 
-        rate = rospy.Rate(10)
+        rate = rospy.Rate(20)
         while not rospy.is_shutdown():
             if self._as.is_preempt_requested():
                 rospy.logwarn("[ControlActionServer] Preempt requested -> Cancel current goal.")
@@ -122,66 +124,65 @@ class ControlServer:
                 return
 
             if goal.mode == "STOP":
-                self.desired_speed = 0.0
+                speed = 0.0
                 steering_angle = 0.0
             elif goal.mode == "URBAN":
-                self.desired_speed = 20.0
-                steering_angle = self.pp.compute_steering_angle(
+                speed, steering_angle = self.mpc.compute_control_command(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "CROSSWALK":
-                self.desired_speed = 20.0
+                speed = self.desired_speed
                 steering_angle = self.pp.compute_steering_angle(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "HIGHWAY":
-                self.desired_speed = 20.0
+                speed = self.desired_speed
                 steering_angle = self.pp.compute_steering_angle(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "INTERSECTION":
-                self.desired_speed = 20.0
+                speed = self.desired_speed
                 steering_angle = self.pp.compute_steering_angle(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "PARKING":
-                self.desired_speed = 20.0
+                speed = self.desired_speed
                 steering_angle = self.pp.compute_steering_angle(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "ROUNDABOUT":
-                self.desired_speed = 20.0
+                speed = self.desired_speed
                 steering_angle = self.pp.compute_steering_angle(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "RAMP":
-                self.desired_speed = 20.0
+                speed = self.desired_speed
                 steering_angle = self.pp.compute_steering_angle(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "BUSLANE":
-                self.desired_speed = 20.0
+                speed = self.desired_speed
                 steering_angle = self.pp.compute_steering_angle(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "TUNNEL":
-                self.desired_speed = 20.0
+                speed = self.desired_speed
                 steering_angle = self.pp.compute_steering_angle(
                     self.path,
                     self.current_pos,
@@ -190,7 +191,7 @@ class ControlServer:
             
             command = {}
             command['action'] =  '1'
-            command['speed'] = float(self.desired_speed / 100.0)
+            command['speed'] = float(speed)
             command = json.dumps(command)
             self.command_pub.publish(command)
 

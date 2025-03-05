@@ -157,8 +157,8 @@ class TechnicalChallengeSmach:
                 # highway와 같이 시작, 끝 좌표가 튜플 형태로 저장된 경우
                 if isinstance(coords, tuple):
                     start_coords, end_coords = coords
-                    start_index = get_index(self.path, start_coords[0], start_coords[1])
-                    end_index = get_index(self.path, end_coords[0], end_coords[1])
+                    start_index = get_nearest_index(self.path, start_coords[0], start_coords[1])
+                    end_index = get_nearest_index(self.path, end_coords[0], end_coords[1])
                     if None in (start_index, end_index):
                         self.range_index[segment] = (-1, -1)
                         continue
@@ -169,7 +169,7 @@ class TechnicalChallengeSmach:
                 elif isinstance(coords, list):
                     node_indices = []
                     for node in coords:
-                        idx = get_index(self.path, node[0], node[1])
+                        idx = get_nearest_index(self.path, node[0], node[1])
                         if not idx:
                             continue
                         node_indices.append(idx)
