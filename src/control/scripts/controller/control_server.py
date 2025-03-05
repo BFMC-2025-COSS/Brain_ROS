@@ -42,7 +42,6 @@ class ControlServer:
         self.path = []  # global path
         self.current_pos = (0.0, 0.0)
         self.current_yaw = 0.0  # radian
-        # self.control_timer = rospy.Timer(rospy.Duration(0.1), self.control_loop)
 
         self.pp = PurePursuit(self.look_ahead_dist, self.wheel_base)
         self.mpc = NonlinearMPCController(dt=0.25, horizon=10, wheelbase=0.26)
@@ -88,28 +87,6 @@ class ControlServer:
         self.current_pos = (x_rear, y_rear)
         self.current_yaw = theta
 
-    def control_loop(self, event):
-        if not self.path:
-            return
-
-        steering_angle = self.pp.compute_steering_angle(
-            self.path,
-            self.current_pos,
-            self.current_yaw
-        )
-
-        command = {}
-        command['action'] =  '1'
-        command['speed'] = float(self.desired_speed / 100.0)
-        command = json.dumps(command)
-        self.command_pub.publish(command)
-
-        command = {}
-        command['action'] = '2'
-        command['steerAngle'] = float(-1.0 * math.degrees(steering_angle))
-        command = json.dumps(command)
-        self.command_pub.publish(command)
-
     def execute_cb(self, goal):
         rospy.loginfo("[ControlActionServer] Received goal: mode=%s", goal.mode)
 
@@ -133,57 +110,49 @@ class ControlServer:
                     self.current_yaw
                 )
             elif goal.mode == "CROSSWALK":
-                speed = self.desired_speed
-                steering_angle = self.pp.compute_steering_angle(
+                speed, steering_angle = self.mpc.compute_control_command(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "HIGHWAY":
-                speed = self.desired_speed
-                steering_angle = self.pp.compute_steering_angle(
+                speed, steering_angle = self.mpc.compute_control_command(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "INTERSECTION":
-                speed = self.desired_speed
-                steering_angle = self.pp.compute_steering_angle(
+                speed, steering_angle = self.mpc.compute_control_command(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "PARKING":
-                speed = self.desired_speed
-                steering_angle = self.pp.compute_steering_angle(
+                speed, steering_angle = self.mpc.compute_control_command(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "ROUNDABOUT":
-                speed = self.desired_speed
-                steering_angle = self.pp.compute_steering_angle(
+                speed, steering_angle = self.mpc.compute_control_command(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "RAMP":
-                speed = self.desired_speed
-                steering_angle = self.pp.compute_steering_angle(
+                speed, steering_angle = self.mpc.compute_control_command(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "BUSLANE":
-                speed = self.desired_speed
-                steering_angle = self.pp.compute_steering_angle(
+                speed, steering_angle = self.mpc.compute_control_command(
                     self.path,
                     self.current_pos,
                     self.current_yaw
                 )
             elif goal.mode == "TUNNEL":
-                speed = self.desired_speed
-                steering_angle = self.pp.compute_steering_angle(
+                speed, steering_angle = self.mpc.compute_control_command(
                     self.path,
                     self.current_pos,
                     self.current_yaw
