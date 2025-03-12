@@ -1,0 +1,17 @@
+<launch>
+    <!-- Realsense IMU Publisher -->
+    <node pkg="bfmc" type="realsense_publisher.py" name="realsense_publisher" output="screen"/>
+    
+    <!-- Serial Read (Speed) -->
+    <node pkg="bfmc" type="serial_read.py" name="serial_read" output="screen"/>
+    
+    <!-- Initial Odometry Calculation -->
+    <node pkg="bfmc" type="initial_odo.py" name="initial_odo" output="screen"/>
+
+    <!-- Serial Write -->
+    <node pkg="bfmc" type="serial_write.py" name="serial_write" output="screen"/>
+
+    <!-- Static Transform: map -> odom -->
+    <node pkg="tf" type = "static_transform_publisher" name="map_to_odom" args="0 0 0 0 0 0 1 map odom 10"/>
+</launch>
+
