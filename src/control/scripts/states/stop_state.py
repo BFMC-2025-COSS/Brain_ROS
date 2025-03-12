@@ -7,67 +7,49 @@ import actionlib
 from control.msg import ControlAction, ControlGoal
 from actionlib_msgs.msg import GoalStatus
 
-class UrbanState(smach.State):
-    def __init__(self, ac_client, get_sensor_func=None):
-        """
-        ac_client: actionlib.SimpleActionClient(ControlAction)
-        get_sensor_func: 보행자/고속도로 감지 등의 외부 함수를 주입받을 수도 있음.
-        """
+class StopState(smach.State):
+    def __init__(self, ac_client, stop_time=None, condition_func=None):
         smach.State.__init__(
             self,
-            outcomes=['go_highway', 'pedestrian_detected', 'preempted']
+            outcomes=['done','preempted']
         )
         self._ac_client = ac_client
-        self._get_sensor_func = get_sensor_func if get_sensor_func else self.default_sensor_func
-
-    def default_sensor_func(self):
-        # 실제로는 토픽/센서/서비스 등을 읽어 "보행자/고속도로" 여부를 반환
-        return {
-            'pedestrian': False,
-            'highway': False
-        }
+        self.stop_time = stop_time
+        self.condition_func = condition_func
 
     def execute(self, userdata):
-        rospy.loginfo("[UrbanState] Enter state: URBAN driving")
+        rospy.loginfo(f"[StopState] Enter: STOP mode, stop_time={self.stop_time}, has_condition={self.condition_func is not None}")
 
-        # 1) 액션 Goal 전송 (무기한 주행)
-        goal = ControlGoal(mode="URBAN")
-        self._ac_client.send_goal(goal)
-        rospy.loginfo("[UrbanState] Sent goal: URBAN mode. Now indefinite driving...")
+        # 1) STOP Goal 전송
+        stop_goal = ControlGoal(mode="STOP")
+        self._ac_client.send_goal(stop_goal)
 
-        rate = rospy.Rate(10)
+        start_time = rospy.Time.now()
+        rate = rospy.Rate(10)  # 10Hz
+
         while not rospy.is_shutdown():
-            # 2) 센서 또는 이벤트 체크
-            sensor_data = self._get_sensor_func()
-            if sensor_data['pedestrian']:
-                rospy.loginfo("[UrbanState] Pedestrian detected -> transition")
-                self._ac_client.cancel_goal()  # 현재 URBAN 주행 취소
-                return 'pedestrian_detected'
-            if sensor_data['highway']:
-                rospy.loginfo("[UrbanState] Highway entrance detected -> transition")
-                self._ac_client.cancel_goal()
-                return 'go_highway'
-
-            # 3) preempt 체크 (상위에서 취소 명령이 들어왔나?)
             if self.preempt_requested():
+                rospy.logwarn("[StopState] Preempt requested => 'preempted'")
                 self.service_preempt()
                 self._ac_client.cancel_goal()
                 return 'preempted'
 
-            # 4) 액션 서버 상태 확인 (실제론 indefinite이므로, SUCCEEDED 잘 안 뜸)
-            #    하지만 혹시 서버 쪽에서 예외로 set_succeeded()나 set_aborted() 등을 호출할 수도 있으니 체크
+            elapsed = (rospy.Time.now() - start_time).to_sec()
+            time_done = False
+            if self.stop_time is not None and elapsed >= self.stop_time:
+                time_done = True
+
+            cond_done = False
+            if self.condition_func is not None and self.condition_func():
+                cond_done = True
+
+            if time_done or cond_done:
+                rospy.loginfo("[StopState] stop wait ended. time_done=%s, cond_done=%s", time_done, cond_done)
+                self._ac_client.cancel_goal()
+                return 'done'
+
             state = self._ac_client.get_state()
             if state in [GoalStatus.ABORTED, GoalStatus.REJECTED]:
-                rospy.logwarn("[UrbanState] Action ended unexpectedly (state=%s).", state)
-                return 'preempted'
-            elif state == GoalStatus.SUCCEEDED:
-                rospy.loginfo("[UrbanState] Action ended with success (unexpected?).")
-                # 무기한 주행에서 서버가 종료될 이유가 없다면, 그냥 'preempted' 취급
-                # 또는 'go_highway' 등 다른 전이로 정의 가능
-                return 'preempted'
+                rospy.logwarn("[StopState] STOP Action ended unexpectedly (state=%s). Still waiting though.", state)
 
             rate.sleep()
-
-        # 노드가 종료
-        self._ac_client.cancel_goal()
-        return 'preempted'

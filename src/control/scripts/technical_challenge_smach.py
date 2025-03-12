@@ -9,11 +9,13 @@ import actionlib
 from actionlib_msgs.msg import GoalStatus
 from control.msg import ControlAction
 
+from states.stop_state import StopState
 from states.urban_state import UrbanState
 from states.crosswalk_state import CrosswalkState
 from states.highway_state import HighwayState
 from states.intersection_state import IntersectionState
 from states.parking_state import ParkingState
+from states.exit_parking_state import ExitParkingState
 from states.roundabout_state import RoundaboutState
 from states.buslane_state import BuslaneState
 
@@ -31,6 +33,7 @@ import yaml
 
 class TechnicalChallengeSmach:
     def __init__(self):
+        # ROS Initialization
         rospy.init_node('smach_action_client')
 
         rospack = rospkg.RosPack()
@@ -39,6 +42,13 @@ class TechnicalChallengeSmach:
         default_graphml_path = os.path.join(package_path, 'config', 'Competition_track_graph.graphml')
         default_range_data = os.path.join(package_path, 'config', 'range_data.yaml')
 
+        # ROS Parameters
+        self.crosswalk_dist = rospy.get_param('~crosswalk_dist', 0.3)
+        self.intersection_dist = rospy.get_param('~intersection_dist', 0.5)
+        self.roundabout_dist = rospy.get_param('~roundabout_dist', 0.85)
+        self.default_dist = rospy.get_param('~default_dist', 0.3)
+
+        # Variables
         self.path = []
         self.current_pos = (0.0, 0.0)
         self.current_yaw = 0.0  # radian
@@ -50,15 +60,23 @@ class TechnicalChallengeSmach:
         self.range_data = self.load_range_data_file(default_range_data)
         self.range_index = {}
 
+        self.segment_dist_map = {
+            "crosswalk": self.crosswalk_dist,
+            "intersection": self.intersection_dist,
+            "roundabout": self.roundabout_dist
+        }
+
         # ROS Subscribers
         self.path_sub = rospy.Subscriber('/global_path', Path, self.path_callback)
         self.gps_sub = rospy.Subscriber('/automobile/localisation', localisation, self.gps_callback)
 
+        # ROS Action
         self.client = actionlib.SimpleActionClient('control_action', ControlAction)
         rospy.loginfo("Waiting for action server [control_action]...")
         self.client.wait_for_server()
         rospy.loginfo("Action server connected.")
 
+        # SMACH
         self.sm_top = smach.StateMachine(
             outcomes=['SM_FINISHED', 'SM_PREEMPTED']
         )
@@ -115,8 +133,26 @@ class TechnicalChallengeSmach:
                 'PARKING_STATE',
                 ParkingState(ac_client=self.client, topic_data=self.topic_data, range_index=self.range_index),
                 transitions={
-                    # 'stop_state'            : 'STOP_STATE',
-                    'exit_parking'          : 'URBAN_STATE',
+                    'stop_after_park'       : 'PARKING_STOP_STATE',
+                    'exit_parking'          : 'EXIT_PARKING_STATE',
+                    'preempted'             : 'SM_PREEMPTED'
+                }
+            )
+
+            smach.StateMachine.add(
+                'PARKING_STOP_STATE',
+                StopState(ac_client=self.client, stop_time=2.0),
+                transitions={
+                    'done'                  : 'EXIT_PARKING_STATE',
+                    'preempted'             : 'SM_PREEMPTED'
+                }
+            )
+
+            smach.StateMachine.add(
+                'EXIT_PARKING_STATE',
+                ExitParkingState(ac_client=self.client, topic_data=self.topic_data, range_index=self.range_index),
+                transitions={
+                    'return_to_urban_state' : 'URBAN_STATE',
                     'preempted'             : 'SM_PREEMPTED'
                 }
             )
@@ -145,48 +181,76 @@ class TechnicalChallengeSmach:
         self.sis.start()
 
     def path_callback(self, msg):
-        if not self.path_received:
-            self.path = []
-            for pose_stamped in msg.poses:
-                x = pose_stamped.pose.position.x
-                y = pose_stamped.pose.position.y
-                self.path.append((x, y))
-            
-            # 각 segment별로 range_data 처리
-            for segment, coords in self.range_data.items():
-                # highway와 같이 시작, 끝 좌표가 튜플 형태로 저장된 경우
-                if isinstance(coords, tuple):
-                    start_coords, end_coords = coords
-                    start_index = get_index(self.path, start_coords[0], start_coords[1])
-                    end_index = get_index(self.path, end_coords[0], end_coords[1])
-                    if None in (start_index, end_index):
-                        self.range_index[segment] = (-1, -1)
-                        continue
-                    self.range_index[segment] = (start_index, end_index)
-                    rospy.loginfo("Segment '%s' updated: start index=%s, end index=%s", 
-                                segment, start_index, end_index)
-                # 교차로나 노드 기반 구간의 경우, coords가 여러 노드의 좌표 리스트임
-                elif isinstance(coords, list):
-                    node_indices = []
-                    for node in coords:
-                        idx = get_index(self.path, node[0], node[1])
-                        if not idx:
-                            continue
-                        node_indices.append(idx)
-                    node_indices = list(set(node_indices))
-                    self.range_index[segment] = node_indices
-                    rospy.loginfo("Segment '%s' updated with node indices: %s", segment, node_indices)
-                else:
-                    rospy.logwarn("Segment '%s' has an unknown coordinate format", segment)
-            
-            self.path_received = True
+        if self.path_received:
+            return
 
+        self.path = [(pose.pose.position.x, pose.pose.position.y) for pose in msg.poses]
+
+        for segment, seg_info in self.range_data.items():
+            segment_type = seg_info.get('type', 'midpoint')
+            coords_list = seg_info.get('coords', [])
+
+            if segment_type == 'range':
+                if len(coords_list) != 2:
+                    self.range_index[segment] = (-1, -1)
+                    continue
+
+                start_coords = coords_list[0]
+                end_coords   = coords_list[1]
+
+                start_indices = get_indices_within_distance(self.path, start_coords[0], start_coords[1])
+                end_indices   = get_indices_within_distance(self.path, end_coords[0], end_coords[1])
+
+                if not start_indices or not end_indices:
+                    self.range_index[segment] = (-1, -1)
+                    rospy.logwarn("Segment '%s': Failed to find indices for start or end coordinates.", segment)
+                    continue
+
+                start_index = min(start_indices, key=lambda idx:
+                                (self.path[idx][0] - start_coords[0])**2 + (self.path[idx][1] - start_coords[1])**2)
+                end_index = min(end_indices, key=lambda idx:
+                                (self.path[idx][0] - end_coords[0])**2 + (self.path[idx][1] - end_coords[1])**2)
+
+                self.range_index[segment] = (start_index, end_index)
+                rospy.loginfo("Segment '%s': [range] start index=%d, end index=%d", segment, start_index, end_index)
+
+            elif segment_type == 'midpoint':
+                dist = self.segment_dist_map.get(segment, self.default_dist)
+                node_indices = []
+
+                for (nx, ny) in coords_list:
+                    near_inds = get_indices_within_distance(self.path, nx, ny, dist)
+                    node_indices.extend(near_inds)
+
+                node_indices = sorted(set(node_indices))
+                self.range_index[segment] = node_indices
+                rospy.loginfo("Segment '%s': [midpoint] found indices=%s (distance=%.2f)", segment, node_indices, dist)
+
+            else:
+                dist = self.segment_dist_map.get(segment, self.default_dist)
+                node_indices = []
+
+                for (nx, ny) in coords_list:
+                    near_inds = get_indices_within_distance(self.path, nx, ny, dist)
+                    node_indices.extend(near_inds)
+
+                node_indices = sorted(set(node_indices))
+                self.range_index[segment] = node_indices
+                rospy.loginfo("Segment '%s': [default] found indices=%s (distance=%.2f)",
+                            segment, node_indices, dist)
+
+        self.path_received = True
 
     def gps_callback(self, msg):
-        if self.path_received:
-            self.current_pos = (msg.posA, msg.posB)
-            self.topic_data['closest_index'] = get_nearest_index(self.path, self.current_pos[0], self.current_pos[1])
-            self.gps_received = True
+        if not self.path_received:
+            return
+        self.current_pos = (msg.posA, msg.posB)
+        idx = get_nearest_index(self.path, self.current_pos[0], self.current_pos[1])
+        if idx is not None:
+            self.topic_data['closest_index'] = idx
+        else:
+            rospy.logwarn("No nearest index found for current GPS position!")
+        self.gps_received = True
 
     def load_graphml_file(self, file_path):
         try:
@@ -199,45 +263,73 @@ class TechnicalChallengeSmach:
     
     def load_range_data_file(self, file_path):
         if not os.path.exists(file_path):
-            rospy.logwarn(f"Range data file {file_path} not found. Using an empty list.")
+            rospy.logwarn(f"Range data file {file_path} not found. Using empty data.")
             return {}
+
         try:
             with open(file_path, 'r') as f:
                 yaml_data = yaml.safe_load(f)
+
             range_data = {}
+
             for segment, seg_data in yaml_data.items():
-                # highway와 같이 시작/끝 노드 번호가 있는 경우
-                if 'start_node' in seg_data and 'end_node' in seg_data:
-                    start_node = str(seg_data['start_node'])
-                    end_node = str(seg_data['end_node'])
-                    if start_node in self.graph.nodes and end_node in self.graph.nodes:
-                        # GraphML에서는 attr.name에 따라 'x'와 'y'로 저장됨
-                        start_x = float(self.graph.nodes[start_node].get('x', None))
-                        start_y = float(self.graph.nodes[start_node].get('y', None))
-                        end_x   = float(self.graph.nodes[end_node].get('x', None))
-                        end_y   = float(self.graph.nodes[end_node].get('y', None))
-                        range_data[segment] = ((start_x, start_y), (end_x, end_y))
-                        rospy.loginfo("Loaded segment '%s': start node %s at (%s, %s), end node %s at (%s, %s)", 
-                                    segment, start_node, start_x, start_y, end_node, end_x, end_y)
-                    else:
-                        rospy.logwarn("Nodes %s or %s not found in graph", start_node, end_node)
-                # 교차로 등 여러 노드 번호로 구성된 구간인 경우
-                elif 'nodes' in seg_data:
-                    node_ids = seg_data['nodes']
-                    nodes_coords = []
-                    for node_id in node_ids:
-                        node_id = str(node_id)
-                        if node_id in self.graph.nodes:
-                            x = float(self.graph.nodes[node_id].get('x', None))
-                            y = float(self.graph.nodes[node_id].get('y', None))
-                            nodes_coords.append((x, y))
+                segment_type = seg_data.get('type', 'midpoint')
+
+                if 'nodes' not in seg_data:
+                    rospy.logwarn(f"Segment '{segment}' has no 'nodes' key. Skipping.")
+                    continue
+                nodes_list = seg_data['nodes']
+
+                node_coords = []
+
+                for sublist in nodes_list:
+                    if not isinstance(sublist, list):
+                        continue
+
+                    if len(sublist) == 1:
+                        node_id = str(sublist[0])
+                        if node_id not in self.graph.nodes:
+                            rospy.logwarn("Segment '%s': node_id '%s' not in graph.", segment, node_id)
+                            continue
+
+                        x = float(self.graph.nodes[node_id].get('x', 0.0))
+                        y = float(self.graph.nodes[node_id].get('y', 0.0))
+                        node_coords.append((x, y))
+                        rospy.loginfo("Segment '%s': single node => %s => (%.3f, %.3f)", segment, node_id, x, y)
+
+                    elif len(sublist) == 2:
+                        node_id1 = str(sublist[0])
+                        node_id2 = str(sublist[1])
+
+                        if (node_id1 not in self.graph.nodes) or (node_id2 not in self.graph.nodes):
+                            rospy.logwarn("Segment '%s': either '%s' or '%s' not in graph.", segment, node_id1, node_id2)
+                            continue
+
+                        x1 = float(self.graph.nodes[node_id1].get('x', 0.0))
+                        y1 = float(self.graph.nodes[node_id1].get('y', 0.0))
+                        x2 = float(self.graph.nodes[node_id2].get('x', 0.0))
+                        y2 = float(self.graph.nodes[node_id2].get('y', 0.0))
+
+                        if segment_type == "midpoint":
+                            mid_x = (x1 + x2) / 2.0
+                            mid_y = (y1 + y2) / 2.0
+                            node_coords.append((mid_x, mid_y))
+                            rospy.loginfo("Segment '%s': 2-node midpoint => (%.3f, %.3f)", segment, mid_x, mid_y)
+                        elif segment_type == "range":
+                            node_coords.append((x1, y1))
+                            node_coords.append((x2, y2))
+                            rospy.loginfo("Segment '%s': 2-node range => start=(%.3f, %.3f), end=(%.3f, %.3f)", segment, x1, y1, x2, y2)
                         else:
-                            rospy.logwarn("Node %s not found in graph", node_id)
-                    range_data[segment] = nodes_coords
-                    rospy.loginfo("Loaded segment '%s' with nodes: %s", segment, nodes_coords)
-                else:
-                    rospy.logwarn("Segment '%s' has no valid node specification", segment)
+                            rospy.logwarn("Segment '%s': unknown type '%s'", segment, segment_type)
+
+                range_data[segment] = {
+                    "type": segment_type,
+                    "coords": node_coords
+                }
+                rospy.loginfo("Segment '%s' => node_coords list = %s", segment, node_coords)
+
             return range_data
+
         except Exception as e:
             rospy.logerr(f"Failed to load Range data file: {e}")
             return {}

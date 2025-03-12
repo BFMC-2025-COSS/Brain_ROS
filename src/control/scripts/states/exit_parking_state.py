@@ -7,12 +7,11 @@ import actionlib
 from control.msg import ControlAction, ControlGoal
 from actionlib_msgs.msg import GoalStatus
 
-class ParkingState(smach.State):
+class ExitParkingState(smach.State):
     def __init__(self, ac_client, topic_data, range_index):
         smach.State.__init__(
             self,
-            outcomes = ['stop_after_park',
-                        'exit_parking',
+            outcomes = ['return_to_urban_state',
                         'preempted']
         )
         self._ac_client = ac_client
@@ -22,7 +21,7 @@ class ParkingState(smach.State):
     def execute(self, userdata):
         # rospy.loginfo("[ParkingState] Enter state: Parking driving")
 
-        goal = ControlGoal(mode="PARKING")
+        goal = ControlGoal(mode="EXIT_PARKING")
         self._ac_client.send_goal(goal)
         # rospy.loginfo("[ParkingState] Sent goal: Parking mode. Now indefinite driving...")
 
@@ -43,15 +42,15 @@ class ParkingState(smach.State):
                 # rospy.logwarn("[ParkingState] Action ended unexpectedly (state=%s).", state)
                 return 'preempted'
             elif state == GoalStatus.SUCCEEDED:
-                rospy.loginfo("[ParkingState] Action ended with success => parking complete.")
+                rospy.loginfo("[ExitParkingState] Action ended with success => exit parking complete.")
                 
                 # 필요하다면 result를 확인할 수도 있음
                 result = self._ac_client.get_result()
                 if result and getattr(result, 'success', False):
-                    rospy.loginfo("[ParkingState] result.success=True -> exit parking state")
-                    return 'stop_after_park'
+                    rospy.loginfo("[ExitParkingState] result.success=True -> return to urban state")
+                    return 'return_to_urban_state'
                 else:
-                    rospy.logwarn("[ParkingState] Received SUCCEEDED but result.success=False? Treat as preempted.")
+                    rospy.logwarn("[ExitParkingState] Received SUCCEEDED but result.success=False? Treat as preempted.")
                     return 'preempted'
 
             rate.sleep()

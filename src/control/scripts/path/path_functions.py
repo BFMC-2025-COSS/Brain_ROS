@@ -13,3 +13,15 @@ def get_index(path, x, y):
         if x == path_x and y == path_y:
             return i
     return None 
+
+def get_indices_within_distance(path, x, y, dist=0.1):
+    indices = []
+    dist_sq = dist * dist
+
+    for i, (px, py) in enumerate(path):
+        dx = px - x
+        dy = py - y
+        if (dx*dx + dy*dy) <= dist_sq:
+            indices.append(i)
+    
+    return indices
