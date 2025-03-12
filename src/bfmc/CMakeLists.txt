@@ -33,13 +33,13 @@ generate_messages(
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
 catkin_install_python(PROGRAMS
-  Brain/src/hardware/camera/realsense_publisher.py
-  Brain/src/hardware/YOLO/yolo_detector.py
-  Brain/src/hardware/Lanekeep/lane_keeper.py
-  Brain/src/hardware/serialhandler/serial_write.py
-  Brain/src/hardware/serialhandler/serial_read.py
-  Brain/src/hardware/serialhandler/command.py
-  Brain/src/hardware/Localization/initial_odo.py
+  src/hardware/camera/realsense_publisher.py
+  src/hardware/YOLO/yolo_detector.py
+  src/hardware/Lanekeep/lane_keeper.py
+  src/hardware/serialhandler/serial_write.py
+  src/hardware/serialhandler/serial_read.py
+  src/hardware/serialhandler/command.py
+  src/hardware/Localization/initial_odo.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
