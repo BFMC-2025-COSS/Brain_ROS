@@ -9,11 +9,13 @@ import actionlib
 from actionlib_msgs.msg import GoalStatus
 from control.msg import ControlAction
 
+from states.stop_state import StopState
 from states.urban_state import UrbanState
 from states.crosswalk_state import CrosswalkState
 from states.highway_state import HighwayState
 from states.intersection_state import IntersectionState
 from states.parking_state import ParkingState
+from states.exit_parking_state import ExitParkingState
 from states.roundabout_state import RoundaboutState
 from states.buslane_state import BuslaneState
 
@@ -131,8 +133,26 @@ class TechnicalChallengeSmach:
                 'PARKING_STATE',
                 ParkingState(ac_client=self.client, topic_data=self.topic_data, range_index=self.range_index),
                 transitions={
-                    # 'stop_state'            : 'STOP_STATE',
-                    'exit_parking'          : 'URBAN_STATE',
+                    'stop_after_park'       : 'PARKING_STOP_STATE',
+                    'exit_parking'          : 'EXIT_PARKING_STATE',
+                    'preempted'             : 'SM_PREEMPTED'
+                }
+            )
+
+            smach.StateMachine.add(
+                'PARKING_STOP_STATE',
+                StopState(ac_client=self.client, stop_time=2.0),
+                transitions={
+                    'done'                  : 'EXIT_PARKING_STATE',
+                    'preempted'             : 'SM_PREEMPTED'
+                }
+            )
+
+            smach.StateMachine.add(
+                'EXIT_PARKING_STATE',
+                ExitParkingState(ac_client=self.client, topic_data=self.topic_data, range_index=self.range_index),
+                transitions={
+                    'return_to_urban_state' : 'URBAN_STATE',
                     'preempted'             : 'SM_PREEMPTED'
                 }
             )
@@ -220,8 +240,6 @@ class TechnicalChallengeSmach:
                             segment, node_indices, dist)
 
         self.path_received = True
-
-
 
     def gps_callback(self, msg):
         if not self.path_received:

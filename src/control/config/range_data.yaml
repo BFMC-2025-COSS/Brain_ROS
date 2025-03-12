@@ -37,7 +37,7 @@ intersection:
 parking:
   type: "range"
   nodes:
-    - [228, 239]
+    - [231, 239]
 
 roundabout:
   type: "midpoint"

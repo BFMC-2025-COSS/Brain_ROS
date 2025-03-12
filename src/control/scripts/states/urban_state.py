@@ -50,7 +50,7 @@ class UrbanState(smach.State):
                 self._ac_client.cancel_goal()
                 return 'enter_intersection'
             
-            if self.range_index['parking'][0] <= self.topic_data['closest_index'] < self.range_index['parking'][1]:
+            if self.topic_data['closest_index'] == self.range_index['parking'][0]:
                 # rospy.loginfo("[UrbanState] Parking entrance detected -> transition")
                 self._ac_client.cancel_goal()
                 return 'enter_parking'
