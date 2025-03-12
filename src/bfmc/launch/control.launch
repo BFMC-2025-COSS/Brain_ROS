@@ -1,0 +1,5 @@
+<launch>
+    <!-- Command -->
+    <node pkg="bfmc" type="command.py" name="command" output="screen"/>
+</launch>
+
