@@ -176,17 +176,18 @@ class NonlinearMPCController:
                                                        math.cos(new_yaw - prev_yaw))
         return xref
         
-    def compute_control_command(self, path, current_pos, current_yaw, scenario="driving"):
+    def compute_control_command(self, path, current_pos, current_yaw, desired_speed, scenario="driving"):
         self.global_path = path
         self.x, self.y = current_pos
         self.yaw = current_yaw
+        self.set_scenario(scenario)
+        self.v_max = desired_speed
 
         st = StateStruct(self.x, self.y, self.yaw)
 
         near_i = self.get_nearest_idx(st.x, st.y, self.global_path, self.global_idx)
         self.global_idx = near_i
         xref = self.build_xref(self.global_path, near_i, st, is_parking=False)
-        self.set_scenario(scenario)
         x0 = np.array([st.x, st.y, st.yaw])
         (v_traj, steer_traj), _ = self.solve_mpc(x0, xref)
         v_cmd = v_traj[0] if v_traj is not None else 0.0
