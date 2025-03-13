@@ -76,10 +76,10 @@ def icp(src, dst, max_iterations=20, tolerance=1e-4):
     prev_error = float('inf')
     
     for i in range(max_iterations):
-        print(f"Iteration: {i}")
+        #print(f"Iteration: {i}")
         distances, indices = nearest_neighbor(src, dst)
         matched_dst = dst[indices]
-        print("Ready compute")
+        #print("Ready compute")
         R, t = compute_transform(src, matched_dst)
         
         # 현재 단계에서의 2D rigid 변환 행렬 만들기

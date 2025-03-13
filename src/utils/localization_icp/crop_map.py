@@ -1,6 +1,43 @@
 import cv2
 import numpy as np
 import math
+import rospy
+from nav_msgs.msg import Odometry
+
+map_img = None
+
+class CroppingMap:
+    def __init__(self, baudrate=115200):
+        rospy.init_node("cropMap_node", anonymous=True)
+
+        self.odom_sub = rospy.Subscriber('/odom', Odometry, self.odomCallback)
+        self.corretedOdom_sub = rospy.Subscriber('/localization/correctedOdom', Odometry, self.correctedCallback)
+
+        self.odom = [None, None]
+        self.corrected_odom = [None, None]
+        self.entire_map = cv2.imread("./test_img/SEAME_map.png")
+
+    def odomCallback(self, msg):
+        self.odom[0] = int(msg.pose.pose.position.x * 100)
+        self.odom[1] = int(msg.pose.pose.position.y * 100)
+    
+    def correctedCallback(self, msg):
+        self.corrected_odom[0] = int(msg.pose.pose.position.x * 100)
+        self.corrected_odom[1] = int(msg.pose.pose.position.y * 100)
+
+    def run(self):
+        while not rospy.is_shutdown():
+            print("Odom:    ", self.odom, "\nCorrectedOdom:    ", self.corrected_odom)
+            if self.odom[0] != None and self.corrected_odom[0] != None:
+                img_height, img_width = self.entire_map.shape[:2]
+                if 0 <= self.odom[0] < img_width and 0 <= self.odom[1] < img_height:
+                    cv2.circle(self.entire_map, (self.odom[0], self.odom[1]), 5, (0, 255, 0), -1)
+                if 0 <= self.corrected_odom[0] < img_width and 0 <= self.corrected_odom[1] < img_height:
+                    cv2.circle(self.entire_map, (self.corrected_odom[0], self.corrected_odom[1]), 5, (0, 165, 255), -1)
+            cv2.imshow("Original Image", self.entire_map)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break 
+        cv2.destroyAllWindows()
 
 def extract_rotated_roi(image, rotated_pts, zoom_width, zoom_height):
     # 목적 좌표 (변환 후 크기)
@@ -20,24 +57,18 @@ def extract_rotated_roi(image, rotated_pts, zoom_width, zoom_height):
     return roi
 
 
-def zoom_in_on_region(image_path, x, y, heading, zoom_width=160, zoom_height=90):
-    # 이미지 로드
-    image = cv2.imread(image_path)
-    if image is None:
-        print("이미지를 불러올 수 없습니다.")
-        return
-    
-    h, w, _ = image.shape  # 이미지 크기
+def zoom_in_on_region(map_img, x, y, heading, zoom_width=160, zoom_height=90):    
+    h, w, _ = map_img.shape  # 이미지 크기
     
     # 기준점
     pivot_x, pivot_y = x, y + zoom_height // 2
 
     # ROI 좌표
     rect_pts = np.array([
-        [x - zoom_width // 2, y - zoom_height],  # 좌상단
-        [x + zoom_width // 2, y - zoom_height],  # 우상단
-        [x + zoom_width // 2, y],  # 우하단
-        [x - zoom_width // 2, y]   # 좌하단
+        [x - zoom_width // 2 + 17, y - zoom_height - 1 + 45],  # 좌상단
+        [x + zoom_width // 2 + 17, y - zoom_height - 1 + 45],  # 우상단
+        [x + zoom_width // 2 + 17, y - 1 + 45],  # 우하단
+        [x - zoom_width // 2 + 17, y - 1 + 45]   # 좌하단
     ], dtype=np.float32)
 
     # 회전 변환 행렬 생성
@@ -56,7 +87,7 @@ def zoom_in_on_region(image_path, x, y, heading, zoom_width=160, zoom_height=90)
     
     # 관심영역 추출
     return_width, return_height = 480, 270
-    roi = extract_rotated_roi(image, rotated_pts, zoom_width, zoom_height)
+    roi = extract_rotated_roi(map_img, rotated_pts, zoom_width, zoom_height)
     zoomed = np.zeros((return_height, return_width, 3), dtype=np.uint8)  # 검은색 배경
     
     # 확대할 영역이 있으면 확대 적용
@@ -65,21 +96,23 @@ def zoom_in_on_region(image_path, x, y, heading, zoom_width=160, zoom_height=90)
         zoomed[:resized_roi.shape[0], :resized_roi.shape[1]] = resized_roi
     
     # 원본 이미지에 표시 추가
-    cv2.circle(image, (x, y), 5, (0, 255, 0), -1)  # 초기 위치 초록색 점
+    cv2.circle(map_img, (x, y), 5, (0, 255, 0), -1)  # 초기 위치 초록색 점
     
     # Rotated ROI 영역을 선으로 그림 (네 개 점을 이용)
-    cv2.polylines(image, [rotated_pts], isClosed=True, color=(0, 0, 255), thickness=2)
+    cv2.polylines(map_img, [rotated_pts], isClosed=True, color=(0, 0, 255), thickness=2)
     
     # 결과 출력
-    cv2.imshow("Original Image", image)
-    cv2.imshow("Zoomed Image", zoomed)
+    #cv2.imshow("Original Image", map_img)
+    #cv2.imshow("Zoomed Image", zoomed)
     #cv2.imwrite("./zoom_img.png", zoomed)
     #cv2.waitKey(0)
     #cv2.destroyAllWindows()
 
     return zoomed, M
 
-# 예제 실행 (파일 경로와 확대 중심 좌표, 헤딩값 입력)
 if __name__ == '__main__':
     image_path = "./test_img/SEAME_map.png"
-    zoom_in_on_region(image_path, x=720, y=425, heading=0)
+    # zoom_in_on_region(image_path, x=720, y=425, heading=0)
+
+    map_process = CroppingMap()
+    map_process.run()

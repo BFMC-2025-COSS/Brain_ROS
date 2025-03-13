@@ -10,17 +10,13 @@ def convert_bev(img):
     image = img
     h, w = image.shape[:2]
 
-    # 🔹 차선의 시작점과 끝점을 수동으로 설정 (예제 값)
-    # left_line_start = (int(42), int(h))  # 왼쪽 차선 시작점
-    # left_line_end = (int(270), int(167))    # 왼쪽 차선 끝점
-    # right_line_start = (int(595), int(h)) # 오른쪽 차선 시작점
-    # right_line_end = (int(370), int(167))   # 오른쪽 차선 끝점
+    # 차선의 시작점과 끝점을 수동으로 설정 (예제 값)
     left_line_start = (int(25), int(h))  # 왼쪽 차선 시작점
     left_line_end = (int(135), int(140))    # 왼쪽 차선 끝점
     right_line_start = (int(445), int(h)) # 오른쪽 차선 시작점
     right_line_end = (int(340), int(140))   # 오른쪽 차선 끝점
 
-    # 🔹 원본 이미지에서 차선이 위치한 네 개의 좌표 설정
+    # 원본 이미지에서 차선이 위치한 네 개의 좌표 설정
     src_pts = np.float32([
         left_line_start,
         left_line_end,
@@ -28,12 +24,8 @@ def convert_bev(img):
         right_line_end
     ])
 
-    # 🔹 변환 후, 차선을 평행하게 만드는 목표 좌표
+    # 변환 후, 차선을 평행하게 만드는 목표 좌표
     dst_pts = np.float32([
-        # [int(0.4*w), h],  # 왼쪽 차선 하단
-        # [int(0.4*w), 0],  # 왼쪽 차선 상단
-        # [int(0.6*w), h],  # 오른쪽 차선 하단
-        # [int(0.6*w), 0]   # 오른쪽 차선 상단
         [int(0.35*w), h],  # 왼쪽 차선 하단
         [int(0.35*w), h * 0.5],  # 왼쪽 차선 상단
         [int(0.65*w), h],  # 오른쪽 차선 하단
@@ -61,13 +53,14 @@ def convert_bev(img):
     cv2.line(image_with_lines, (x_min, y_min_right), (x_max, y_max_right), (0, 255, 0), 3) # 오른쪽 차선 (초록색)
 
 
-    # 🔹 Homography 행렬 자동 계산
+    # Homography 행렬 자동 계산
     H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
 
-    # 🔹 변환 적용 (BEV)
+    # 변환 적용 (BEV)
     bev_image = cv2.warpPerspective(image, H, (w, h))
     # cv2.imwrite("bev_image1.png",bev_image)
-    # 🔹 결과 출력
+    
+    # 결과 출력
     # plt.figure(figsize=(10,5))
     # plt.subplot(1,2,1)
     # plt.title("Original Image")
@@ -86,4 +79,3 @@ def convert_bev(img):
 if __name__ == '__main__':
     image = cv2.imread("./test_img/mask1.jpg")
     cv2.imshow("original", image)
-
