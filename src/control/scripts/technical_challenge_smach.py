@@ -26,6 +26,7 @@ from visualization_msgs.msg import Marker
 from utils.msg import localisation
 
 from path.path_functions import *
+from control_utils.load_file import LoadData
 
 import networkx as nx
 import os
@@ -55,9 +56,10 @@ class TechnicalChallengeSmach:
         self.path_received = False
         self.gps_received = False
 
+        self.ld = LoadData()
         self.topic_data = {'closest_index' : 0}
-        self.graph = self.load_graphml_file(default_graphml_path)
-        self.range_data = self.load_range_data_file(default_range_data)
+        self.graph = self.ld.load_graphml_file(default_graphml_path)
+        self.range_data = self.ld.load_range_data_file(default_range_data, self.graph)
         self.range_index = {}
 
         self.segment_dist_map = {
@@ -185,59 +187,7 @@ class TechnicalChallengeSmach:
             return
 
         self.path = [(pose.pose.position.x, pose.pose.position.y) for pose in msg.poses]
-
-        for segment, seg_info in self.range_data.items():
-            segment_type = seg_info.get('type', 'midpoint')
-            coords_list = seg_info.get('coords', [])
-
-            if segment_type == 'range':
-                if len(coords_list) != 2:
-                    self.range_index[segment] = (-1, -1)
-                    continue
-
-                start_coords = coords_list[0]
-                end_coords   = coords_list[1]
-
-                start_indices = get_indices_within_distance(self.path, start_coords[0], start_coords[1])
-                end_indices   = get_indices_within_distance(self.path, end_coords[0], end_coords[1])
-
-                if not start_indices or not end_indices:
-                    self.range_index[segment] = (-1, -1)
-                    rospy.logwarn("Segment '%s': Failed to find indices for start or end coordinates.", segment)
-                    continue
-
-                start_index = min(start_indices, key=lambda idx:
-                                (self.path[idx][0] - start_coords[0])**2 + (self.path[idx][1] - start_coords[1])**2)
-                end_index = min(end_indices, key=lambda idx:
-                                (self.path[idx][0] - end_coords[0])**2 + (self.path[idx][1] - end_coords[1])**2)
-
-                self.range_index[segment] = (start_index, end_index)
-                rospy.loginfo("Segment '%s': [range] start index=%d, end index=%d", segment, start_index, end_index)
-
-            elif segment_type == 'midpoint':
-                dist = self.segment_dist_map.get(segment, self.default_dist)
-                node_indices = []
-
-                for (nx, ny) in coords_list:
-                    near_inds = get_indices_within_distance(self.path, nx, ny, dist)
-                    node_indices.extend(near_inds)
-
-                node_indices = sorted(set(node_indices))
-                self.range_index[segment] = node_indices
-                rospy.loginfo("Segment '%s': [midpoint] found indices=%s (distance=%.2f)", segment, node_indices, dist)
-
-            else:
-                dist = self.segment_dist_map.get(segment, self.default_dist)
-                node_indices = []
-
-                for (nx, ny) in coords_list:
-                    near_inds = get_indices_within_distance(self.path, nx, ny, dist)
-                    node_indices.extend(near_inds)
-
-                node_indices = sorted(set(node_indices))
-                self.range_index[segment] = node_indices
-                rospy.loginfo("Segment '%s': [default] found indices=%s (distance=%.2f)",
-                            segment, node_indices, dist)
+        self.range_index = self.ld.load_path_file(self.range_data, self.path, self.segment_dist_map, self.default_dist)
 
         self.path_received = True
 
@@ -251,88 +201,6 @@ class TechnicalChallengeSmach:
         else:
             rospy.logwarn("No nearest index found for current GPS position!")
         self.gps_received = True
-
-    def load_graphml_file(self, file_path):
-        try:
-            g = nx.read_graphml(file_path)
-            rospy.loginfo("Successfully loaded GraphML.")
-            return g
-        except Exception as e:
-            rospy.logerr(f"Failed to load GraphML file: {e}")
-            return None
-    
-    def load_range_data_file(self, file_path):
-        if not os.path.exists(file_path):
-            rospy.logwarn(f"Range data file {file_path} not found. Using empty data.")
-            return {}
-
-        try:
-            with open(file_path, 'r') as f:
-                yaml_data = yaml.safe_load(f)
-
-            range_data = {}
-
-            for segment, seg_data in yaml_data.items():
-                segment_type = seg_data.get('type', 'midpoint')
-
-                if 'nodes' not in seg_data:
-                    rospy.logwarn(f"Segment '{segment}' has no 'nodes' key. Skipping.")
-                    continue
-                nodes_list = seg_data['nodes']
-
-                node_coords = []
-
-                for sublist in nodes_list:
-                    if not isinstance(sublist, list):
-                        continue
-
-                    if len(sublist) == 1:
-                        node_id = str(sublist[0])
-                        if node_id not in self.graph.nodes:
-                            rospy.logwarn("Segment '%s': node_id '%s' not in graph.", segment, node_id)
-                            continue
-
-                        x = float(self.graph.nodes[node_id].get('x', 0.0))
-                        y = float(self.graph.nodes[node_id].get('y', 0.0))
-                        node_coords.append((x, y))
-                        rospy.loginfo("Segment '%s': single node => %s => (%.3f, %.3f)", segment, node_id, x, y)
-
-                    elif len(sublist) == 2:
-                        node_id1 = str(sublist[0])
-                        node_id2 = str(sublist[1])
-
-                        if (node_id1 not in self.graph.nodes) or (node_id2 not in self.graph.nodes):
-                            rospy.logwarn("Segment '%s': either '%s' or '%s' not in graph.", segment, node_id1, node_id2)
-                            continue
-
-                        x1 = float(self.graph.nodes[node_id1].get('x', 0.0))
-                        y1 = float(self.graph.nodes[node_id1].get('y', 0.0))
-                        x2 = float(self.graph.nodes[node_id2].get('x', 0.0))
-                        y2 = float(self.graph.nodes[node_id2].get('y', 0.0))
-
-                        if segment_type == "midpoint":
-                            mid_x = (x1 + x2) / 2.0
-                            mid_y = (y1 + y2) / 2.0
-                            node_coords.append((mid_x, mid_y))
-                            rospy.loginfo("Segment '%s': 2-node midpoint => (%.3f, %.3f)", segment, mid_x, mid_y)
-                        elif segment_type == "range":
-                            node_coords.append((x1, y1))
-                            node_coords.append((x2, y2))
-                            rospy.loginfo("Segment '%s': 2-node range => start=(%.3f, %.3f), end=(%.3f, %.3f)", segment, x1, y1, x2, y2)
-                        else:
-                            rospy.logwarn("Segment '%s': unknown type '%s'", segment, segment_type)
-
-                range_data[segment] = {
-                    "type": segment_type,
-                    "coords": node_coords
-                }
-                rospy.loginfo("Segment '%s' => node_coords list = %s", segment, node_coords)
-
-            return range_data
-
-        except Exception as e:
-            rospy.logerr(f"Failed to load Range data file: {e}")
-            return {}
 
     def run(self):
         rospy.loginfo("Waiting for initial global path and GPS data...")

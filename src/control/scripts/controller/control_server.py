@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import rospy
+import rospkg
 import actionlib
 
 from control.msg import ControlAction, ControlResult, ControlFeedback
@@ -8,26 +9,38 @@ from control.msg import ControlAction, ControlResult, ControlFeedback
 from nav_msgs.msg import Path
 from std_msgs.msg import String
 from visualization_msgs.msg import Marker
-# from geometry_msgs.msg import Point
 from utils.msg import localisation
 from sensor_msgs.msg import Imu
+
+from control_utils.load_file import LoadData
 
 from pure_pursuit import PurePursuit
 from mpc import NonlinearMPCController
 
 import math
 import json
-# import os
+import os
 
 class ControlServer:
     def __init__(self, name='control_action'):
         # ROS Node
         rospy.init_node('control_action_server')
 
+        rospack = rospkg.RosPack()
+        package_path = rospack.get_path('control')
+
+        default_graphml_path = os.path.join(package_path, 'config', 'Competition_track_graph.graphml')
+        default_range_data = os.path.join(package_path, 'config', 'range_data.yaml')
+
         # ROS Parameters
         self.look_ahead_dist = rospy.get_param('~look_ahead_dist', 0.38)
         self.wheel_base = rospy.get_param('~wheel_base', 0.26)
         self.desired_speed = rospy.get_param('~desired_speed', 0.3)
+
+        self.crosswalk_dist = rospy.get_param('~crosswalk_dist', 0.3)
+        self.intersection_dist = rospy.get_param('~intersection_dist', 0.5)
+        self.roundabout_dist = rospy.get_param('~roundabout_dist', 0.85)
+        self.default_dist = rospy.get_param('~default_dist', 0.3)
 
         # ROS Subscribers
         self.path_sub = rospy.Subscriber('/global_path', Path, self.path_callback)
@@ -48,6 +61,11 @@ class ControlServer:
         self.path = []  # global path
         self.current_pos = (0.0, 0.0)
         self.current_yaw = 0.0  # radian
+
+        self.ld = LoadData()
+        self.graph = self.ld.load_graphml_file(default_graphml_path)
+        # self.range_data = self.ld.load_range_data_file(default_range_data, self.graph)
+        # self.range_index = {}
 
         self.pp = PurePursuit(self.look_ahead_dist, self.wheel_base)
         self.mpc = NonlinearMPCController(dt=0.25, horizon=10, wheelbase=0.26)
@@ -94,6 +112,8 @@ class ControlServer:
             x = pose_stamped.pose.position.x
             y = pose_stamped.pose.position.y
             self.path.append((x, y))
+
+        # self.range_index = self.ld.load_path_file(self.range_data, self.path, self.segment_dist_map, self.default_dist)
 
         self.path_received = True
 
