@@ -51,7 +51,7 @@ class LocalizationICP:
 
     def imuCallback(self, msg):
         self.heading = (-(msg.yaw / 31635) * 360 + 270) % 360
-        # print("Heading value: ", self.heading)
+        print("Heading value: ", self.heading)
     
     def cropped_to_global(self, Xc,Yc, X0, Y0, theta):
         Xc = Xc / 3 - 80 #+ 17
@@ -70,12 +70,14 @@ class LocalizationICP:
     def run(self):
         # odemetry 위치 기반 지도 상의 ROI 추출
         
-        self.odom = [30, 545]
+        self.odom = [420, 460]
         self.heading = 0
         
         print("START")
         print(self.odom)
         print("Zoom the map")
+
+        rate = rospy.Rate(2)
 
         while not rospy.is_shutdown():
             if self.odom[0] == None or self.heading == None:
@@ -182,6 +184,8 @@ class LocalizationICP:
 
             cv2.imshow("ICP Localization", canvas)
             cv2.waitKey(1)
+
+            rate.sleep()
 
         # rospy.spin()
         
