@@ -16,8 +16,8 @@ from bfmc.msg import realsense_imu, bfmc_imu
 # x_ = 0.3  # 30pixel
 # y_ = 0.55 #5.45 # 55pixel
 
-x_ = 0.45  # 30pixel
-y_ = 0.55 
+x_ = 4.2  # 30pixel
+y_ = 4.6 
 
 heading = 0.0 
 linear_velocity_ = 0.0
@@ -37,6 +37,7 @@ last_time_ = None
 
 start_time = None
 finish_time = None
+alpha = 0.7
 
 def get_yaw_from_quaternion(quat):
     """쿼터니언 데이터를 사용하여 yaw 값(라디안)을 반환"""
@@ -95,7 +96,7 @@ def speed_callback(msg):
     print("speed_callback",linear_velocity_)
 
 def odom_callback(msg):
-    global x_, y_, local_update, corrected_odom, odom_feedback
+    global x_, y_, local_update, corrected_odom, odom_feedback, alpha
     corrected_x = msg.pose.pose.position.x
     corrected_y = msg.pose.pose.position.y
 
@@ -104,8 +105,10 @@ def odom_callback(msg):
             local_update = False
         else:
             local_update = True
-            x_ = msg.pose.pose.position.x
-            y_ = msg.pose.pose.position.y
+            x_ = alpha * x_ + (1-alpha) * msg.pose.pose.position.x
+            y_ = alpha * y_ + (1-alpha) * msg.pose.pose.position.y
+
+    update_odometry()
 
     odom_feedback += 1
 
@@ -176,8 +179,10 @@ def main():
     last_time_ = current_time_
 
     rate = rospy.Rate(2)  # 50Hz 업데이트
+    update_odometry()
+
     while not rospy.is_shutdown():
-        update_odometry()
+        #update_odometry()
         rate.sleep()
 
 

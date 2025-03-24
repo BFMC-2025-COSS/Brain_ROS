@@ -65,10 +65,10 @@ def zoom_in_on_region(map_img, x, y, heading, zoom_width=160, zoom_height=90):
 
     # ROI 좌표
     rect_pts = np.array([
-        [x - zoom_width // 2 + 17, y - zoom_height - 1 + 45],  # 좌상단
-        [x + zoom_width // 2 + 17, y - zoom_height - 1 + 45],  # 우상단
-        [x + zoom_width // 2 + 17, y - 1 + 45],  # 우하단
-        [x - zoom_width // 2 + 17, y - 1 + 45]   # 좌하단
+        [x - zoom_width // 2 + 17, y - zoom_height - 1],  # 좌상단
+        [x + zoom_width // 2 + 17, y - zoom_height - 1],  # 우상단
+        [x + zoom_width // 2 + 17, y - 1],  # 우하단
+        [x - zoom_width // 2 + 17, y - 1]   # 좌하단
     ], dtype=np.float32)
 
     # 회전 변환 행렬 생성
