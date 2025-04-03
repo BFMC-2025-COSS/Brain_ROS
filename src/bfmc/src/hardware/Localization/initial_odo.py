@@ -197,7 +197,7 @@
 
 
 
-# #!/usr/bin/env python3
+#!/usr/bin/env python3
 
 import rospy
 import tf
@@ -208,6 +208,7 @@ from std_msgs.msg import Float64, Float32
 from geometry_msgs.msg import Quaternion
 import tf.transformations as transformations
 from bfmc.msg import realsense_imu, bfmc_imu
+import message_filters
 
 # 초기 위치 및 속도 변수
 # x_ = 11.77
@@ -352,6 +353,33 @@ def update_odometry():
         "odom"
     )
 
+def synced_callback(imu_msg, speed_msg):
+    global angular_velocity_,linear_velocity_, yaw_, prev_yaw_
+    global quaternion
+    global start_time, finish_time
+
+    yaw_ = -(imu_msg.yaw / 31635) * 360
+    if yaw_ >180:
+        yaw = yaw_-360
+    else:
+        yaw = yaw_
+    yaw_ = yaw_ * math.pi / 180
+
+    start_time = rospy.Time.now()
+    if finish_time is not None:
+        dt = (start_time - finish_time).to_sec()
+        delta_yaw = yaw_ - prev_yaw_
+        angular_velocity_ = delta_yaw / dt
+    else:
+        angular_velocity_ = 0.0
+    
+    finish_time = start_time
+    prev_yaw_ = yaw_
+
+    quaternion = transformations.quaternion_from_euler(0, 0, yaw*3.141592 / 180)
+
+    global linear_velocity_
+    linear_velocity_ = speed_msg.data / 100  # cm/s -> m/s 변환
 
 def main():
     global odom_pub_, current_time_, last_time_, yaw_pub_
@@ -368,10 +396,19 @@ def main():
     #rospy.Subscriber('/realsense_imu', realsense_imu, realsense_callback)
 
 
-    rospy.Subscriber('/BFMC_imu', bfmc_imu, bfmc_callback)
-    rospy.Subscriber('/sensor/speed', Float32, speed_callback)
+    imu_sub = message_filters.Subscriber('/BFMC_imu', bfmc_imu)
+    speed_sub = message_filters.Subscriber('/sensor/speed', Float32)
     # rospy.Subscriber('/speed', Float32, speed_callback)
     # rospy.Subscriber('localization/correctedOdom', Odometry, odom_callback)
+
+    ats = message_filters.ApproximateTimeSynchronizer(
+        [imu_sub, speed_sub],
+        queue_size=10,
+        slop=0.1,
+        allow_headerless=True
+    )
+
+    ats.registerCallback(synced_callback)
 
     current_time_ = rospy.Time.now()
     last_time_ = current_time_
