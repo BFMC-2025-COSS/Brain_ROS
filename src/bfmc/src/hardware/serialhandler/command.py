@@ -2,7 +2,9 @@
 
 import rospy
 import json
-from std_msgs.msg import String
+from std_msgs.msg import String, Float32
+from geometry_msgs.msg import Point
+
 import sys
 import termios
 import tty
@@ -11,23 +13,51 @@ class CommandNode:
     def __init__(self):
         rospy.init_node("command_node", anonymous=True)
         self.pub = rospy.Publisher("/serial/command", String, queue_size=10)
+        self.init_imu = rospy.Publisher("/init_imu", Float32, queue_size=10)
+        self.init_position = rospy.Publisher("/init_position", Point, queue_size=10)
         self.speed =0
         self.steer_angle = 0
 
         self.select_mode()
 
-    def select_mode(self):
+    def select_mode(self): #maybe too many loop?
         while not rospy.is_shutdown():
-            mode = input("Select mode: kl or wasd: ")
+            mode = input("Select mode: kl or wasd or init: ")
             if mode == "kl":
                 self.kl_mode()
                 break
             elif mode == "wasd":
                 self.wasd_mode()
+            elif mode == "init":
+                self.init_param()
             elif mode == "q":
                 exit(0)
             else:
                 print("Invalid mode")
+
+    def init_param(self):
+        while not rospy.is_shutdown():
+            try:
+                mode = input("Select mode: init_yaw or init_position: ")
+                if mode == "init_yaw":
+                    self.init_imu.publish(Float32(0))
+                    break
+                elif mode == "init_position":
+                    position = Point()
+                    position.x = float(input("Enter x position: "))
+                    position.y = float(input("Enter y position: "))
+                    position.z = 0
+                    self.init_position.publish(position)
+                    break
+                else:
+                    print("Invalid mode")
+            except rospy.ROSInterruptException:
+                break
+            except KeyboardInterrupt:
+                rospy.loginfo("KL Command Node Stopped.")
+                break
+
+
 
     def getch(self):
         fd = sys.stdin.fileno()

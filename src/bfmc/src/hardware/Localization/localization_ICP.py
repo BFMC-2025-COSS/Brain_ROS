@@ -68,7 +68,7 @@ def compute_transform(src, dst):
     # return R, t
     return cp.asnumpy(R), cp.asnumpy(t)
 
-def icp(src, dst, max_iterations=20, tolerance=1e-4):
+def icp(src, dst, max_iterations=40, tolerance=1e-4):
     # src = source.copy()
     # dst = target.copy()
 

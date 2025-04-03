@@ -84,75 +84,137 @@ class LocalizationICP:
                 rospy.sleep(1)
             print("="*100, "\nInit Odom:   ", self.odom, "\nHeading:    ", self.heading, "\n", "="*100)
 
-            map_roi, map_matrix = zoom_in_on_region(self.map_img, x = self.odom[0], y = self.odom[1], heading = self.heading)
-            if map_roi is None:
-                raise ValueError("Failed to extract map ROI")
-            print("map_roi shape:", map_roi.shape)
+            T_total, aligned_bev_points, final_error = None, None, 5.0
+            x_roi,y_roi = self.odom[0], self.odom[1]
 
-            # map_matrix 3x3 행렬로 변환
-            map_matrix_3x3 = np.eye(3)
-            map_matrix_3x3[:2, :] = map_matrix
+            for t in range(0, 1):
+                map_roi, map_matrix = zoom_in_on_region(self.map_img, x = self.odom[0] + (30 * np.sin(self.heading) * t), y = self.odom[1] + (30 * np.cos(self.heading) * t), heading = self.heading)
+                if map_roi is None:
+                    raise ValueError("Failed to extract map ROI")
+                print("map_roi shape:", map_roi.shape)
 
-            # odom을 ROI 좌표계로 변환
-            odom_h = np.array([self.odom[0], self.odom[1], 1])
-            odom_roi = map_matrix_3x3 @ odom_h
+                # map_matrix 3x3 행렬로 변환
+                map_matrix_3x3 = np.eye(3)
+                map_matrix_3x3[:2, :] = map_matrix
 
-            # if self.camera_img is None:
-            #     print("No camera image received")
-            #     return
-            if self.mask_img is None:
-                print("No mask image received")
-                continue
+                # odom을 ROI 좌표계로 변환
+                odom_h = np.array([self.odom[0], self.odom[1], 1])
+                odom_roi = map_matrix_3x3 @ odom_h
+
+                # if self.camera_img is None:
+                #     print("No camera image received")
+                #     return
+                if self.mask_img is None:
+                    print("No mask image received")
+                    continue
+                
+                # BEV 이미지 추출
+                # bev_image = convert_bev(self.camera_img)
+                bev_image = convert_bev(self.mask_img)
+                #print("bev_image shape:", bev_image.shape)
+
+                # ICP localization
+                # 점군 추출
+                bev_points = extract_points_from_image(bev_image)
+                map_points = extract_points_from_image(map_roi)
+                
+                print(f"BEV 점군 픽셀 개수: {len(bev_points)}")
+                print(f"맵 점군 픽셀 개수: {len(map_points)}")
+
+                if len(bev_points) == 0 or len(map_points) == 0:
+                    print("="*100,"\nAny point is detected\n","="*100)
+                    continue
+                
+                scale = 0.75
+                bev_points_phys = rescale_points(bev_points, scale)
+                map_points_phys = map_points.copy()
+
+                bev_view = rescale_points(bev_points_phys, 5)
+                map_view = rescale_points(map_points_phys, 5)
+
+                # ICP 실행
+                T_total_example, aligned_bev_points_example, final_error_example = icp(bev_points_phys, map_points_phys)
+
+                if final_error_example < final_error:
+                    T_total = T_total_example
+                    aligned_bev_points = aligned_bev_points_example
+                    final_error = final_error_example
+                    x_roi,y_roi = self.odom[0] + (30 * np.sin(self.heading) * t), self.odom[1] + (30 * np.cos(self.heading) * t)
+
+                    if final_error < 1:
+                        break
+
+            # map_roi, map_matrix = zoom_in_on_region(self.map_img, x = self.odom[0], y = self.odom[1], heading = self.heading)
+            # if map_roi is None:
+            #     raise ValueError("Failed to extract map ROI")
+            # print("map_roi shape:", map_roi.shape)
+
+            # # map_matrix 3x3 행렬로 변환
+            # map_matrix_3x3 = np.eye(3)
+            # map_matrix_3x3[:2, :] = map_matrix
+
+            # # odom을 ROI 좌표계로 변환
+            # odom_h = np.array([self.odom[0], self.odom[1], 1])
+            # odom_roi = map_matrix_3x3 @ odom_h
+
+            # # if self.camera_img is None:
+            # #     print("No camera image received")
+            # #     return
+            # if self.mask_img is None:
+            #     print("No mask image received")
+            #     continue
             
-            # BEV 이미지 추출
-            # bev_image = convert_bev(self.camera_img)
-            bev_image = convert_bev(self.mask_img)
-            #print("bev_image shape:", bev_image.shape)
+            # # BEV 이미지 추출
+            # # bev_image = convert_bev(self.camera_img)
+            # bev_image = convert_bev(self.mask_img)
+            # #print("bev_image shape:", bev_image.shape)
 
-            # ICP localization
-            # 점군 추출
-            bev_points = extract_points_from_image(bev_image)
-            map_points = extract_points_from_image(map_roi)
+            # # ICP localization
+            # # 점군 추출
+            # bev_points = extract_points_from_image(bev_image)
+            # map_points = extract_points_from_image(map_roi)
             
-            #print(f"BEV 점군 픽셀 개수: {len(bev_points)}")
-            #print(f"맵 점군 픽셀 개수: {len(map_points)}")
+            # print(f"BEV 점군 픽셀 개수: {len(bev_points)}")
+            # print(f"맵 점군 픽셀 개수: {len(map_points)}")
 
-            if len(bev_points) == 0 or len(map_points) == 0:
-                print("="*100,"\nAny point is detected\n","="*100)
-                continue
+            # if len(bev_points) == 0 or len(map_points) == 0:
+            #     print("="*100,"\nAny point is detected\n","="*100)
+            #     continue
             
-            scale = 0.75
-            bev_points_phys = rescale_points(bev_points, scale)
-            map_points_phys = map_points.copy()
+            # scale = 0.75
+            # bev_points_phys = rescale_points(bev_points, scale)
+            # map_points_phys = map_points.copy()
 
-            bev_view = rescale_points(bev_points_phys, 5)
-            map_view = rescale_points(map_points_phys, 5)
+            # bev_view = rescale_points(bev_points_phys, 5)
+            # map_view = rescale_points(map_points_phys, 5)
 
-            canvas = np.ones((500, 500, 3), dtype=np.uint8)
-
-            for point in bev_view:
-                x, y = int(point[0]), int(point[1])
-                if 0 <= x < 500 and 0 <= y < 500:
-                    cv2.circle(canvas, (x, y), 1, (0, 0, 255), -1)
-
-            for point in map_view:
-                x, y = int(point[0]), int(point[1])
-                if 0 <= x < 500 and 0 <= y < 500:
-                    cv2.circle(canvas, (x, y), 1, (255, 0, 0), -1)
-
-            # ICP 실행
-            T_total, aligned_bev_points, final_error = icp(bev_points_phys, map_points_phys)
+            # # ICP 실행
+            # T_total, aligned_bev_points, final_error = icp(bev_points_phys, map_points_phys)
             #print("[ICP] 최종 변환 행렬 (T_total):\n", T_total)
             print("[ICP] 최종 평균 매칭 오차:", final_error)
 
+            canvas = np.ones((500, 500, 3), dtype=np.uint8)
+            if bev_view is not None and map_view is not None:
+                for point in bev_view:
+                    x, y = int(point[0]), int(point[1])
+                    if 0 <= x < 500 and 0 <= y < 500:
+                        cv2.circle(canvas, (x, y), 1, (0, 0, 255), -1)
+
+                for point in map_view:
+                    x, y = int(point[0]), int(point[1])
+                    if 0 <= x < 500 and 0 <= y < 500:
+                        cv2.circle(canvas, (x, y), 1, (255, 0, 0), -1)
+
             # odom 위치 보정
-            odom_h = np.array([self.odom[0],self.odom[1], 1])
+            # odom_h = np.array([self.odom[0],self.odom[1], 1])
+            odom_h = np.array([x_roi,y_roi, 1])
             corrected_odom_roi = T_total @ odom_h
 
             map_matrix_inv = np.linalg.inv(map_matrix_3x3)
             corrected_odom = np.linalg.inv(map_matrix_inv) @ corrected_odom_roi
             #corrected_odom = corrected_odom[:2]
-            corrected_odom = np.linalg.inv(T_total) @ [240,295,1]
+            #corrected_odom = np.linalg.inv(T_total) @ [240,295,1] 
+            corrected_odom = np.linalg.inv(T_total) @ [260,255,1]
             xg,yg = self.cropped_to_global(corrected_odom[0], corrected_odom[1], self.odom[0], self.odom[1], self.heading)
             print("Corrected odom: ", xg, yg)
             corrected_odom = [xg, yg]

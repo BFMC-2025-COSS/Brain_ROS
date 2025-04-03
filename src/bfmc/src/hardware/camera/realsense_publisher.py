@@ -37,7 +37,7 @@ class Realsense:
 
         self.yaw = 0.0
         self.prev_time = None
-        self.rate = rospy.Rate(30)
+        self.rate = rospy.Rate(2)
 
         self.gyro_samples = []
         self.gyro_bias_y = 0.0
@@ -80,6 +80,7 @@ class Realsense:
 
     def publish_data(self):
         while not rospy.is_shutdown():
+            rate = rospy.Rate(2)
             frames = self.pipeline.wait_for_frames()
 
             color_frame = frames.get_color_frame()
@@ -100,6 +101,7 @@ class Realsense:
                 if not ret:
                     rospy.logwarn("Failed to capture frame from webcam.")
                     continue
+            
 
 
 
@@ -145,7 +147,7 @@ class Realsense:
                 imu_msg.yaw = self.yaw
                 
                 self.imu_pub.publish(imu_msg)
-            self.rate.sleep()
+            rate.sleep()
 
 if __name__ == '__main__':
     node = Realsense()

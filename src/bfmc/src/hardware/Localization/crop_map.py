@@ -96,10 +96,10 @@ def zoom_in_on_region(map_img, x, y, heading, zoom_width=160, zoom_height=90):
         zoomed[:resized_roi.shape[0], :resized_roi.shape[1]] = resized_roi
     
     # 원본 이미지에 표시 추가
-    cv2.circle(map_img, (x, y), 5, (0, 255, 0), -1)  # 초기 위치 초록색 점
+    #cv2.circle(map_img, (x, y), 5, (0, 255, 0), -1)  # 초기 위치 초록색 점
     
     # Rotated ROI 영역을 선으로 그림 (네 개 점을 이용)
-    cv2.polylines(map_img, [rotated_pts], isClosed=True, color=(0, 0, 255), thickness=2)
+    #cv2.polylines(map_img, [rotated_pts], isClosed=True, color=(0, 0, 255), thickness=2)
     
     # 결과 출력
     #cv2.imshow("Original Image", map_img)
