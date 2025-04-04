@@ -197,7 +197,7 @@
 
 
 
-#!/usr/bin/env python3
+# #!/usr/bin/env python3
 
 import rospy
 import tf
@@ -208,7 +208,6 @@ from std_msgs.msg import Float64, Float32
 from geometry_msgs.msg import Quaternion
 import tf.transformations as transformations
 from bfmc.msg import realsense_imu, bfmc_imu, SpeedStamped
-import message_filters
 
 # 초기 위치 및 속도 변수
 # x_ = 11.77
@@ -216,7 +215,7 @@ import message_filters
 #x_ = 0.3  # 30pixel
 #y_ = 5.45 #5.45 # 55pixel
 
-x_ = 1.50  # 30pixel
+x_ = 0.45  # 30pixel
 y_ = 0.55 
 
 heading = 0.0 
@@ -291,7 +290,7 @@ def bfmc_callback(msg):
 def speed_callback(msg):
     """속도 데이터 콜백 함수"""
     global linear_velocity_
-    linear_velocity_ = msg.data / 100  # cm/s -> m/s 변환
+    linear_velocity_ = msg.speed / 100  # cm/s -> m/s 변환
     print("speed_callback",linear_velocity_)
 
 def odom_callback(msg):
@@ -353,36 +352,6 @@ def update_odometry():
         "odom"
     )
 
-def synced_callback(imu_msg, speed_msg):
-    global angular_velocity_,linear_velocity_, heading, prev_heading
-    global quaternion
-    global start_time, finish_time
-
-    heading = (imu_msg.yaw / 31635) * 360
-    heading -= 22.5
-    yaw_pub_.publish(heading)
-    if heading >180:
-        yaw = heading-360
-    else:
-        yaw = heading
-    heading = heading * math.pi / 180
-
-
-    start_time = rospy.Time.now()
-    if finish_time is not None:
-        dt = (start_time - finish_time).to_sec()
-        delta_yaw = heading - prev_heading
-        angular_velocity_ = delta_yaw / dt
-    else:
-        angular_velocity_ = 0.0
-    
-    finish_time = start_time
-    prev_heading = heading
-
-    quaternion = transformations.quaternion_from_euler(0, 0, -yaw*3.141592 / 180)
-
-    global linear_velocity_
-    linear_velocity_ = speed_msg.speed * 1.85 / 100  # cm/s -> m/s 변환
 
 def main():
     global odom_pub_, current_time_, last_time_, yaw_pub_
@@ -399,19 +368,10 @@ def main():
     #rospy.Subscriber('/realsense_imu', realsense_imu, realsense_callback)
 
 
-    imu_sub = message_filters.Subscriber('/BFMC_imu', bfmc_imu)
-    speed_sub = message_filters.Subscriber('/sensor/speed', SpeedStamped)
+    rospy.Subscriber('/BFMC_imu', bfmc_imu, bfmc_callback)
+    rospy.Subscriber('/sensor/speed', SpeedStamped, speed_callback)
     # rospy.Subscriber('/speed', Float32, speed_callback)
     # rospy.Subscriber('localization/correctedOdom', Odometry, odom_callback)
-
-    ats = message_filters.ApproximateTimeSynchronizer(
-        [imu_sub, speed_sub],
-        queue_size=30,
-        slop=0.1,
-        allow_headerless=True
-    )
-
-    ats.registerCallback(synced_callback)
 
     current_time_ = rospy.Time.now()
     last_time_ = current_time_

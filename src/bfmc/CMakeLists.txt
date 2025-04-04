@@ -18,6 +18,7 @@ add_message_files(
   FILES
   realsense_imu.msg
   bfmc_imu.msg
+  SpeedStamped.msg
 )
 
 ## Generate added messages and services with any dependencies listed here
