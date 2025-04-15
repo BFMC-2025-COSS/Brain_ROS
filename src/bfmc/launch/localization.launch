@@ -13,5 +13,15 @@
 
     <!-- Static Transform: map -> odom -->
     <node pkg="tf" type = "static_transform_publisher" name="map_to_odom" args="0 0 0 0 0 0 1 map odom 10"/>
+
+    <!-- coss_localization -->
+    <node pkg="bfmc" type="coss_localization.py" name="coss_localization" output="screen"/>
+
+    <!-- EKF -->
+    <node pkg="robot_localization" type="ekf_localization_node" name="ekf_localization_node" output="screen">
+        <param name="use_sim_time" value="false"/>
+        <param name="debug" value="false"/>
+        <rosparam command="load" file="$(find bfmc)/config/ekf_fusion.yaml" />
+    </node>
 </launch>
 

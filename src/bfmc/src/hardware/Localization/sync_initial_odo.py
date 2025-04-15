@@ -11,12 +11,12 @@ from bfmc.msg import bfmc_imu  # bfmc_imu에는 orientation, yaw 필드가 있�
 
 # === 전역 변수 초기화 ===
 # Crop map
-x_ = 0.3 
-y_ = 5.45 
+# x_ = 0.3 
+# y_ = 5.45 
 
 # RVIZ
-# x_ = 0.45
-# y_ = 0.55
+x_ = 0.45
+y_ = 0.55
 heading = 0.0
 prev_heading = 0.0
 linear_velocity_ = 0.0
@@ -36,39 +36,47 @@ def sync_callback(imu_msg, speed_msg):
 
     current_time = imu_msg.header.stamp
 
-    # 초기 프레임
+    # Initial frame check
     if last_time_ is None:
         last_time_ = current_time
+        rospy.loginfo("First synchronized message received. Timestamp initialized.")
         return
 
     dt = (current_time - last_time_).to_sec()
+    if dt < 1e-6:
+        rospy.logwarn(f"Delta time is too small (dt={dt:.8f}). Skipping update.")
+        return
     last_time_ = current_time
 
-    # === Yaw 계산 ===
+    # === Yaw Calculation ===
     heading_deg = (imu_msg.yaw / 31635) * 360.0
     yaw_pub_.publish(heading_deg)
+    rospy.loginfo(f"Yaw (degrees): {heading_deg:.2f}")
 
     yaw_rad = math.radians(heading_deg - 360 if heading_deg > 180 else heading_deg)
     heading = yaw_rad
 
-    # === 각속도 계산 ===
+    # === Angular Velocity Calculation ===
     delta_yaw = heading - prev_heading
     angular_velocity_ = delta_yaw / dt
+    rospy.loginfo(f"Angular velocity (rad/s): {angular_velocity_:.4f}")
     prev_heading = heading
 
-    # === 선속도 계산 ===
-    linear_velocity_ = speed_msg.twist.linear.x / 100.0  # m/s
+    # === Linear Velocity Calculation ===
+    linear_velocity_ = speed_msg.twist.linear.x / 100.0  # Convert to m/s
+    rospy.loginfo(f"Linear velocity (m/s): {linear_velocity_:.2f}")
 
-    # === 위치 누적 ===
+    # === Position Update ===
     dx = linear_velocity_ * math.cos(heading) * dt
     dy = linear_velocity_ * math.sin(heading) * dt
     x_ += dx
-    y_ += dy
+    y_ -= dy
+    rospy.loginfo(f"Updated position -> x: {x_:.3f}, y: {y_:.3f}")
 
-    # === 쿼터니언 ===
+    # === Quaternion Calculation ===
     quaternion = transformations.quaternion_from_euler(0, 0, -heading)
 
-    # === Odometry 메시지 생성 ===
+    # === Odometry Message Construction ===
     odom = Odometry()
     odom.header.stamp = current_time
     odom.header.frame_id = "odom"
@@ -83,10 +91,31 @@ def sync_callback(imu_msg, speed_msg):
     odom.pose.pose.orientation.z = quaternion[2]
     odom.pose.pose.orientation.w = quaternion[3]
 
+    cov_pose = [
+        0.01, 0,    0,     0,     0,     0,
+        0,    0.01, 0,     0,     0,     0,
+        0,    0,    99999, 0,     0,     0,
+        0,    0,    0,     99999, 0,     0,
+        0,    0,    0,     0,     99999, 0,
+        0,    0,    0,     0,     0,     0.01
+    ]
+    odom.pose.covariance = cov_pose
+
     odom.twist.twist.linear.x = linear_velocity_
     odom.twist.twist.angular.z = angular_velocity_
 
+    cov_twist = [
+        0.001, 0,    0,     0,     0,     0,
+        0,     0.001,0,     0,     0,     0,
+        0,     0,    99999, 0,     0,     0,
+        0,     0,    0,     99999, 0,     0,
+        0,     0,    0,     0,     99999, 0,
+        0,     0,    0,     0,     0,     0.001
+    ]
+    odom.twist.covariance = cov_twist
+
     odom_pub_.publish(odom)
+    rospy.loginfo("Published Odometry message.")
 
     # === TF Broadcast ===
     br = tf.TransformBroadcaster()
@@ -97,6 +126,7 @@ def sync_callback(imu_msg, speed_msg):
         "base_link",
         "odom"
     )
+    rospy.loginfo("Broadcasted transform from 'odom' to 'base_link'.")
 
 # === 메인 ===
 def main():
