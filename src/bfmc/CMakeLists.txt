@@ -40,6 +40,7 @@ catkin_install_python(PROGRAMS
   src/hardware/serialhandler/serial_read.py
   src/hardware/serialhandler/command.py
   src/hardware/Localization/initial_odo.py
+  src/hardware/Localization/sync_initial_odo.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

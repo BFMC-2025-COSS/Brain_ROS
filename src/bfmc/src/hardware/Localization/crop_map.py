@@ -15,7 +15,7 @@ class CroppingMap:
 
         self.odom = [None, None]
         self.corrected_odom = [None, None]
-        self.entire_map = cv2.imread("./test_img/SEAME_map.png")
+        self.entire_map = cv2.imread("/home/seame/Brain_ROS/src/bfmc/src/hardware/Localization/test_img/SEAME_map.png")
 
     def odomCallback(self, msg):
         self.odom[0] = int(msg.pose.pose.position.x * 100)
@@ -112,7 +112,7 @@ def zoom_in_on_region(map_img, x, y, heading, zoom_width=160, zoom_height=90):
 
 # 예제 실행 (파일 경로와 확대 중심 좌표, 헤딩값 입력)
 if __name__ == '__main__':
-    image_path = "./test_img/SEAME_map.png"
+    image_path = "/home/seame/Brain_ROS/src/bfmc/src/hardware/Localization/test_img/SEAME_map.png"
     # zoom_in_on_region(image_path, x=720, y=425, heading=0)
 
     map_process = CroppingMap()

@@ -3,6 +3,7 @@ import time
 import math
 import serial
 from std_msgs.msg import Float32, Float64
+from geometry_msgs.msg import TwistStamped
 from bfmc.msg import bfmc_imu
 import numpy as np
 
@@ -15,9 +16,10 @@ class SerialReadNode:
         self.serial_port = serial.Serial(port, baudrate, timeout=0.1)
 
         
-        self.speed_pub = rospy.Publisher("/sensor/speed",Float32,queue_size=10)
-        self.seral_speed_pub = rospy.Publisher("/speed",Float32,queue_size=10)
+        self.speed_pub = rospy.Publisher("/sensor/speed",TwistStamped,queue_size=10)
         self.imu_pub = rospy.Publisher("/BFMC_imu",bfmc_imu,queue_size=10)
+
+        self.seral_speed_pub = rospy.Publisher("/speed",Float32,queue_size=10)
         self.imu_init = rospy.Subscriber("/init_imu",Float32,self.init_imu)
         self.Q = 0.3
         self.R = 1.3
@@ -33,9 +35,9 @@ class SerialReadNode:
         self.prev_yaw = 0.0
         self.yaw_offset = 0.0
 
-        self.latest_imu_msg = None
+        # self.latest_imu_msg = None
 
-        rospy.Timer(rospy.Duration(0.5), self.publish_imu)
+        # rospy.Timer(rospy.Duration(0.5), self.publish_imu)
 
     def KalmanF(self,speed):
         self.P = self.P+self.Q
@@ -48,9 +50,9 @@ class SerialReadNode:
     def init_imu(self,msg):
         self.yaw_offset = self.priv_yaw
 
-    def publish_imu(self,event):
-        if self.latest_imu_msg is not None:
-            self.imu_pub.publish(self.latest_imu_msg)
+    # def publish_imu(self,event):
+    #     if self.latest_imu_msg is not None:
+    #         self.imu_pub.publish(self.latest_imu_msg)
 
     def sendqueue(self,buff):
         try:
@@ -62,11 +64,17 @@ class SerialReadNode:
                 # F_speed = self.KalmanF(float(speed))
                 # F_speed = (math.pi*6.1)*0.25*float(F_speed)/60 # 0.2s
                 # self.speed_pub.publish(F_speed)
-                
                 F_speed = self.KalmanF(float(speed))
-                F_speed = (math.pi*6.5)*0.05*float(F_speed)/60 # 0.5s 
+                F_speed = (math.pi*6.5)*0.05*float(F_speed)/60
+                
+
+                msg=TwistStamped()
+                msg.header.stamp = rospy.Time.now()
+                msg.header.frame_id = "speedSensor"
+                msg.twist.linear.x = F_speed
+
                 rospy.loginfo(f"Received speed: {F_speed}")
-                self.speed_pub.publish(F_speed)
+                self.speed_pub.publish(msg)
             elif action == "speed":
                 serial_speed = value.split(",")[0]
                 if self.isFloat(serial_speed):
@@ -92,9 +100,9 @@ class SerialReadNode:
                 imu_msg.accelx = float(data["accelx"])
                 imu_msg.accely = float(data["accely"])
                 imu_msg.accelz = float(data["accelz"])
-                self.priv_yaw = imu_msg.yaw
-                self.latest_imu_msg = imu_msg
-                # self.imu_pub.publish(imu_msg)
+                self.prev_yaw = imu_msg.yaw
+                # self.latest_imu_msg = imu_msg
+                self.imu_pub.publish(imu_msg)
                 
 
             

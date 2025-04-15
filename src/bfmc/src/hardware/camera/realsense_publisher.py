@@ -23,7 +23,7 @@ class Realsense:
 
         self.bridge = CvBridge()
         self.image_pub = rospy.Publisher('/camera/image_raw', Image, queue_size=1)
-        self.mask_pub = rospy.Publisher('/camera/lane_mask', Image, queue_size=1)
+        self.mask_pub = rospy.Publisher('/camera/lane_mask', Image, queue_size=10)
         self.imu_pub = rospy.Publisher('/realsense_imu',realsense_imu, queue_size=10)
 
 
@@ -80,7 +80,7 @@ class Realsense:
 
     def publish_data(self):
         while not rospy.is_shutdown():
-            rate = rospy.Rate(2)
+            rate = rospy.Rate(5)
             frames = self.pipeline.wait_for_frames()
 
             color_frame = frames.get_color_frame()
@@ -91,6 +91,8 @@ class Realsense:
 
                 mask = self.process_frame(frame)
                 mask_msg = self.bridge.cv2_to_imgmsg(mask,encoding = "mono8")
+                mask_msg.header.stamp = rospy.Time.now()
+                mask_msg.header.frame_id = "camera"
                 self.mask_pub.publish(mask_msg)
 
                 # To check

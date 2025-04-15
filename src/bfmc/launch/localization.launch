@@ -6,7 +6,7 @@
     <node pkg="bfmc" type="serial_read.py" name="serial_read" output="screen"/>
     
     <!-- Initial Odometry Calculation -->
-    <node pkg="bfmc" type="initial_odo.py" name="initial_odo" output="screen"/>
+    <node pkg="bfmc" type="sync_initial_odo.py" name="initial_odo" output="screen"/>
 
     <!-- Serial Write -->
     <node pkg="bfmc" type="serial_write.py" name="serial_write" output="screen"/>
