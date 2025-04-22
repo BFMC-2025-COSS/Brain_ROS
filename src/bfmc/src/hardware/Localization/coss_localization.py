@@ -403,7 +403,7 @@ class LocalizationICP:
 
         odom_msg = Odometry()
         odom_msg.header.stamp = rospy.Time.now()
-        odom_msg.header.frame_id = "odom"
+        odom_msg.header.frame_id = "map"
         odom_msg.child_frame_id = "base_link"
         
         if final_error < 3:
